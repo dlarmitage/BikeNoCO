@@ -1,0 +1,423 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		19A84FEA862E4323E8F74208 /* GeoJSONModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23D12D086FAAD86B982E0596 /* GeoJSONModels.swift */; };
+		1CB75187825BEE2C1EAA65ED /* LiveRideHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = C255711A7CC1861D37D4840D /* LiveRideHUD.swift */; };
+		3922BEDC03811F7522DFCF67 /* MapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0CCA8C8AA066008595E4DDB /* MapViewModel.swift */; };
+		392ECDD33E4BD17C4BCF6BAE /* RideSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 714A42B522E6FD1502B4C677 /* RideSummaryView.swift */; };
+		3E423C5922FF3850D3D9DCAB /* RideSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2BE76BA7459088BB7CC1DCB /* RideSession.swift */; };
+		438458A0BDBED5DA4DAF45FF /* LocationPermissionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50DF6580FF822DC0B8CAFB1 /* LocationPermissionMonitor.swift */; };
+		4EAF2C05DBAD38E0045B5213 /* RideRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC91F5D19C33E229B10A2648 /* RideRecorder.swift */; };
+		5A9E7137E68D2F188228B153 /* RouteDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EE07731C2129377853D00AF /* RouteDetailView.swift */; };
+		609589DFF688723AC1777485 /* BikeRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92290381360B3409E835DAD8 /* BikeRoute.swift */; };
+		6AF593476F119894C601FA6D /* BikeNoCoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5FCDB19D449C57BF234CBB5 /* BikeNoCoApp.swift */; };
+		7DB57737015677EE163EBB14 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1B0727BC7CB18D6683B199C /* Assets.xcassets */; };
+		B6C8E14D808B9A52327BFBE2 /* FilterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A389785ACF9C040E0788408 /* FilterView.swift */; };
+		BD8FA9D3F4E3B418D2CB2424 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 02155B5A37FB5708B98DEAAE /* PrivacyInfo.xcprivacy */; };
+		C8E7C0BF312D0476B9C6458C /* RideWithGPSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3CD5156F33A5C84AD468C9A /* RideWithGPSService.swift */; };
+		ED2C3F00D35FE38E5A7668AB /* ArcGISService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 096E9CE8C42397E25DB46AF4 /* ArcGISService.swift */; };
+		FB4229EAF1A84CE535CC5399 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0BF59DD21E924AA407D3DC /* ContentView.swift */; };
+		FCEE217F602D357B3E6A54DC /* BikeMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02D2D53C5CE2844B82804B1 /* BikeMapView.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		02155B5A37FB5708B98DEAAE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		096E9CE8C42397E25DB46AF4 /* ArcGISService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcGISService.swift; sourceTree = "<group>"; };
+		0EE07731C2129377853D00AF /* RouteDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteDetailView.swift; sourceTree = "<group>"; };
+		23D12D086FAAD86B982E0596 /* GeoJSONModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoJSONModels.swift; sourceTree = "<group>"; };
+		714A42B522E6FD1502B4C677 /* RideSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideSummaryView.swift; sourceTree = "<group>"; };
+		92290381360B3409E835DAD8 /* BikeRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeRoute.swift; sourceTree = "<group>"; };
+		9A389785ACF9C040E0788408 /* FilterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterView.swift; sourceTree = "<group>"; };
+		A02D2D53C5CE2844B82804B1 /* BikeMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeMapView.swift; sourceTree = "<group>"; };
+		A2BE76BA7459088BB7CC1DCB /* RideSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideSession.swift; sourceTree = "<group>"; };
+		AC91F5D19C33E229B10A2648 /* RideRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideRecorder.swift; sourceTree = "<group>"; };
+		B1B0727BC7CB18D6683B199C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C255711A7CC1861D37D4840D /* LiveRideHUD.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveRideHUD.swift; sourceTree = "<group>"; };
+		C3CD5156F33A5C84AD468C9A /* RideWithGPSService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideWithGPSService.swift; sourceTree = "<group>"; };
+		C5FCDB19D449C57BF234CBB5 /* BikeNoCoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeNoCoApp.swift; sourceTree = "<group>"; };
+		CA0BF59DD21E924AA407D3DC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		CBDB9F11B632E0EBA52B559E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		D0CCA8C8AA066008595E4DDB /* MapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapViewModel.swift; sourceTree = "<group>"; };
+		ED3169E27185453028E996AE /* BikeNoCo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BikeNoCo.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		F50DF6580FF822DC0B8CAFB1 /* LocationPermissionMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPermissionMonitor.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		08F1284E6286FEB6CB697CB6 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				C5FCDB19D449C57BF234CBB5 /* BikeNoCoApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		1C05302F667B3102ED33F660 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B1B0727BC7CB18D6683B199C /* Assets.xcassets */,
+				CBDB9F11B632E0EBA52B559E /* Info.plist */,
+				02155B5A37FB5708B98DEAAE /* PrivacyInfo.xcprivacy */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		28689FFD714D5AAE272C592F /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				096E9CE8C42397E25DB46AF4 /* ArcGISService.swift */,
+				F50DF6580FF822DC0B8CAFB1 /* LocationPermissionMonitor.swift */,
+				AC91F5D19C33E229B10A2648 /* RideRecorder.swift */,
+				C3CD5156F33A5C84AD468C9A /* RideWithGPSService.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		597473CD353385C49683296C /* BikeNoCo */ = {
+			isa = PBXGroup;
+			children = (
+				08F1284E6286FEB6CB697CB6 /* App */,
+				6A916ED93029C74A5A47AD69 /* Models */,
+				1C05302F667B3102ED33F660 /* Resources */,
+				28689FFD714D5AAE272C592F /* Services */,
+				C1506714734A607F8D287A6F /* ViewModels */,
+				D32AE63040431F96D7EC2897 /* Views */,
+			);
+			path = BikeNoCo;
+			sourceTree = "<group>";
+		};
+		5C6E4C22F3F20C3E03D9D05E = {
+			isa = PBXGroup;
+			children = (
+				597473CD353385C49683296C /* BikeNoCo */,
+				CC033AD9EF5CB2549132EDB5 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		6A916ED93029C74A5A47AD69 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				92290381360B3409E835DAD8 /* BikeRoute.swift */,
+				23D12D086FAAD86B982E0596 /* GeoJSONModels.swift */,
+				A2BE76BA7459088BB7CC1DCB /* RideSession.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		C1506714734A607F8D287A6F /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				D0CCA8C8AA066008595E4DDB /* MapViewModel.swift */,
+			);
+			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		CC033AD9EF5CB2549132EDB5 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				ED3169E27185453028E996AE /* BikeNoCo.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D32AE63040431F96D7EC2897 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A02D2D53C5CE2844B82804B1 /* BikeMapView.swift */,
+				CA0BF59DD21E924AA407D3DC /* ContentView.swift */,
+				9A389785ACF9C040E0788408 /* FilterView.swift */,
+				C255711A7CC1861D37D4840D /* LiveRideHUD.swift */,
+				714A42B522E6FD1502B4C677 /* RideSummaryView.swift */,
+				0EE07731C2129377853D00AF /* RouteDetailView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		32B37E9D9DD74060AE6BB850 /* BikeNoCo */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C3899066E71E0EE1CBFB132B /* Build configuration list for PBXNativeTarget "BikeNoCo" */;
+			buildPhases = (
+				A4B6DCDF15B705587D150859 /* Sources */,
+				BB7715BF7232F7EB0C5A8548 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BikeNoCo;
+			packageProductDependencies = (
+			);
+			productName = BikeNoCo;
+			productReference = ED3169E27185453028E996AE /* BikeNoCo.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		FDE6A58F087A7B5633666B84 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					32B37E9D9DD74060AE6BB850 = {
+						DevelopmentTeam = ZTL3N8J879;
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = AA92A3582BFBB370E1A99A2C /* Build configuration list for PBXProject "BikeNoCo" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 5C6E4C22F3F20C3E03D9D05E;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = CC033AD9EF5CB2549132EDB5 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				32B37E9D9DD74060AE6BB850 /* BikeNoCo */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		BB7715BF7232F7EB0C5A8548 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7DB57737015677EE163EBB14 /* Assets.xcassets in Resources */,
+				BD8FA9D3F4E3B418D2CB2424 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A4B6DCDF15B705587D150859 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				ED2C3F00D35FE38E5A7668AB /* ArcGISService.swift in Sources */,
+				FCEE217F602D357B3E6A54DC /* BikeMapView.swift in Sources */,
+				6AF593476F119894C601FA6D /* BikeNoCoApp.swift in Sources */,
+				609589DFF688723AC1777485 /* BikeRoute.swift in Sources */,
+				FB4229EAF1A84CE535CC5399 /* ContentView.swift in Sources */,
+				B6C8E14D808B9A52327BFBE2 /* FilterView.swift in Sources */,
+				19A84FEA862E4323E8F74208 /* GeoJSONModels.swift in Sources */,
+				1CB75187825BEE2C1EAA65ED /* LiveRideHUD.swift in Sources */,
+				438458A0BDBED5DA4DAF45FF /* LocationPermissionMonitor.swift in Sources */,
+				3922BEDC03811F7522DFCF67 /* MapViewModel.swift in Sources */,
+				4EAF2C05DBAD38E0045B5213 /* RideRecorder.swift in Sources */,
+				3E423C5922FF3850D3D9DCAB /* RideSession.swift in Sources */,
+				392ECDD33E4BD17C4BCF6BAE /* RideSummaryView.swift in Sources */,
+				C8E7C0BF312D0476B9C6458C /* RideWithGPSService.swift in Sources */,
+				5A9E7137E68D2F188228B153 /* RouteDetailView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		13844C336459A202C9475B35 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZTL3N8J879;
+				INFOPLIST_FILE = BikeNoCo/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.darmitage.BikeNoCo;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		52697773E786E09FFD5E3D3D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = ZTL3N8J879;
+				INFOPLIST_FILE = BikeNoCo/Resources/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.darmitage.BikeNoCo;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		73E857ADE66285CDC0620554 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		ECCC645AE9302A1ABD13E7C5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA92A3582BFBB370E1A99A2C /* Build configuration list for PBXProject "BikeNoCo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				73E857ADE66285CDC0620554 /* Debug */,
+				ECCC645AE9302A1ABD13E7C5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C3899066E71E0EE1CBFB132B /* Build configuration list for PBXNativeTarget "BikeNoCo" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				52697773E786E09FFD5E3D3D /* Debug */,
+				13844C336459A202C9475B35 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = FDE6A58F087A7B5633666B84 /* Project object */;
+}
