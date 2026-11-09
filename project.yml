@@ -16,6 +16,13 @@ targets:
       properties:
         CFBundleDisplayName: BikeNoCo
         UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         NSLocationWhenInUseUsageDescription: "Used to show your position on the map and to record your rides."
         NSLocationAlwaysAndWhenInUseUsageDescription: "Used to continue recording your ride when the app is in the background."
         UIBackgroundModes:
@@ -33,3 +40,34 @@ targets:
         DEVELOPMENT_TEAM: ZTL3N8J879
         CODE_SIGN_IDENTITY: "Apple Development"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  BikeNoCoTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: BikeNoCoTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.darmitage.BikeNoCoTests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        SWIFT_STRICT_CONCURRENCY: minimal
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ZTL3N8J879
+        CODE_SIGN_IDENTITY: "Apple Development"
+    dependencies:
+      - target: BikeNoCo
+
+schemes:
+  BikeNoCo:
+    build:
+      targets:
+        BikeNoCo: all
+        BikeNoCoTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - BikeNoCoTests

@@ -4,10 +4,14 @@ import MapKit
 struct BikeMapView: UIViewRepresentable {
     let routes: [BikeRoute]
     let activeRoute: BikeRoute?
+    let plannedRoute: PlannedRoute?
+    let routeDestination: CLLocationCoordinate2D?
     @Binding var selectedRoute: BikeRoute?
+    @Binding var userCoordinate: CLLocationCoordinate2D?
     let mapType: MKMapType
     @Binding var trackingMode: MKUserTrackingMode
     @Binding var focusRouteID: UUID?
+    var onLongPressDestination: ((CLLocationCoordinate2D) -> Void)?
 
     private static let fortCollinsRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 40.5853, longitude: -105.0844),
@@ -27,11 +31,20 @@ struct BikeMapView: UIViewRepresentable {
                                          action: #selector(Coordinator.handleTap(_:)))
         tap.delegate = context.coordinator
         mapView.addGestureRecognizer(tap)
+
+        let longPress = UILongPressGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleLongPress(_:))
+        )
+        longPress.minimumPressDuration = 0.45
+        mapView.addGestureRecognizer(longPress)
+
         return mapView
     }
 
     func updateUIView(_ mapView: MKMapView, context: Context) {
         let c = context.coordinator
+        c.parent = self
 
         if mapView.mapType != mapType { mapView.mapType = mapType }
         if mapView.userTrackingMode != trackingMode {
@@ -41,6 +54,8 @@ struct BikeMapView: UIViewRepresentable {
         let routeIDs = Set(routes.map { $0.id })
         let routesChanged = routeIDs != c.lastRouteIDs
         let activeChanged = activeRoute?.id != c.lastActiveID
+        let plannedChanged = !Self.sameCoordinates(plannedRoute?.coordinates, c.lastPlannedCoordinates)
+            || !Self.sameCoordinate(routeDestination, c.lastDestination)
 
         // ── Rebuild infrastructure multi-polylines when the route set changes ──
         // One MKMultiPolyline per FacilityType = ~10 overlays total instead of ~5000.
@@ -89,6 +104,32 @@ struct BikeMapView: UIViewRepresentable {
             }
         }
 
+        // ── Planned route overlay + destination pin ──
+        if plannedChanged {
+            c.lastPlannedCoordinates = plannedRoute?.coordinates
+            c.lastDestination = routeDestination
+
+            if let old = c.plannedPolyline { mapView.removeOverlay(old) }
+            c.plannedPolyline = nil
+            if let coords = plannedRoute?.coordinates, coords.count >= 2 {
+                let line = MKPolyline(coordinates: coords, count: coords.count)
+                c.plannedPolyline = line
+                mapView.addOverlay(line, level: .aboveLabels)
+            }
+
+            if let pin = c.destinationAnnotation {
+                mapView.removeAnnotation(pin)
+                c.destinationAnnotation = nil
+            }
+            if let destination = routeDestination {
+                let annotation = MKPointAnnotation()
+                annotation.coordinate = destination
+                annotation.title = "Destination"
+                c.destinationAnnotation = annotation
+                mapView.addAnnotation(annotation)
+            }
+        }
+
         // ── Zoom to active route ──
         if let id = focusRouteID, id != c.lastFocusedID {
             c.lastFocusedID = id
@@ -102,6 +143,31 @@ struct BikeMapView: UIViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    private static func sameCoordinate(_ a: CLLocationCoordinate2D?, _ b: CLLocationCoordinate2D?) -> Bool {
+        switch (a, b) {
+        case (nil, nil): return true
+        case let (a?, b?):
+            return abs(a.latitude - b.latitude) < 1e-9 && abs(a.longitude - b.longitude) < 1e-9
+        default: return false
+        }
+    }
+
+    private static func sameCoordinates(_ a: [CLLocationCoordinate2D]?, _ b: [CLLocationCoordinate2D]?) -> Bool {
+        switch (a, b) {
+        case (nil, nil): return true
+        case let (a?, b?):
+            guard a.count == b.count else { return false }
+            for i in a.indices {
+                if abs(a[i].latitude - b[i].latitude) > 1e-9
+                    || abs(a[i].longitude - b[i].longitude) > 1e-9 {
+                    return false
+                }
+            }
+            return true
+        default: return false
+        }
+    }
 
     // MARK: - Coordinator
 
@@ -118,15 +184,25 @@ struct BikeMapView: UIViewRepresentable {
         var lastActiveID: UUID?
         var hasActiveRoute = false
 
+        // Planned point-to-point route
+        var plannedPolyline: MKPolyline?
+        var lastPlannedCoordinates: [CLLocationCoordinate2D]?
+        var destinationAnnotation: MKPointAnnotation?
+        var lastDestination: CLLocationCoordinate2D?
+
         var lastFocusedID: UUID?
 
         init(parent: BikeMapView) { self.parent = parent }
 
         func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
+            let coordinate = userLocation.coordinate
+            DispatchQueue.main.async {
+                self.parent.userCoordinate = coordinate
+            }
             guard !hasZoomedToUser else { return }
             hasZoomedToUser = true
             mapView.setRegion(
-                MKCoordinateRegion(center: userLocation.coordinate, span: BikeMapView.preferredSpan),
+                MKCoordinateRegion(center: coordinate, span: BikeMapView.preferredSpan),
                 animated: true
             )
         }
@@ -136,6 +212,16 @@ struct BikeMapView: UIViewRepresentable {
         }
 
         func mapView(_ mapView: MKMapView, rendererFor overlay: MKOverlay) -> MKOverlayRenderer {
+            // Planned route: thick indigo, distinct from facility colors and recommended rides
+            if let polyline = overlay as? MKPolyline, overlay === plannedPolyline {
+                let r = MKPolylineRenderer(polyline: polyline)
+                r.strokeColor = UIColor(red: 0.35, green: 0.20, blue: 0.85, alpha: 0.95)
+                r.lineWidth = 7
+                r.lineCap = .round
+                r.lineJoin = .round
+                return r
+            }
+
             // Active suggested-ride: dashed red polyline
             if let polyline = overlay as? MKPolyline, overlay === activePolyline {
                 let r = MKPolylineRenderer(polyline: polyline)
@@ -159,6 +245,26 @@ struct BikeMapView: UIViewRepresentable {
             }
 
             return MKOverlayRenderer(overlay: overlay)
+        }
+
+        func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+            if annotation is MKUserLocation { return nil }
+            guard annotation === destinationAnnotation else { return nil }
+
+            let reuseID = "planned-destination"
+            let view = (mapView.dequeueReusableAnnotationView(withIdentifier: reuseID) as? MKMarkerAnnotationView)
+                ?? MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: reuseID)
+            view.annotation = annotation
+            view.markerTintColor = UIColor(red: 0.35, green: 0.20, blue: 0.85, alpha: 1)
+            view.glyphImage = UIImage(systemName: "flag.fill")
+            view.canShowCallout = false
+            return view
+        }
+
+        @objc func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+            guard gesture.state == .began, let mapView = gesture.view as? MKMapView else { return }
+            let coordinate = mapView.convert(gesture.location(in: mapView), toCoordinateFrom: mapView)
+            parent.onLongPressDestination?(coordinate)
         }
 
         @objc func handleTap(_ gesture: UITapGestureRecognizer) {

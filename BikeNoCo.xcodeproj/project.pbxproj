@@ -7,31 +7,61 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		072E7C12B0498C55F91B4CCD /* LocalProjection.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2E3A835D8381429D785A76E /* LocalProjection.swift */; };
 		19A84FEA862E4323E8F74208 /* GeoJSONModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23D12D086FAAD86B982E0596 /* GeoJSONModels.swift */; };
+		1A187174C4FFD7874DE7E949 /* BikeNetworkGraphTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55257BE2C112BAB7DEC1A7B5 /* BikeNetworkGraphTests.swift */; };
 		1CB75187825BEE2C1EAA65ED /* LiveRideHUD.swift in Sources */ = {isa = PBXBuildFile; fileRef = C255711A7CC1861D37D4840D /* LiveRideHUD.swift */; };
 		3922BEDC03811F7522DFCF67 /* MapViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0CCA8C8AA066008595E4DDB /* MapViewModel.swift */; };
 		392ECDD33E4BD17C4BCF6BAE /* RideSummaryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 714A42B522E6FD1502B4C677 /* RideSummaryView.swift */; };
+		39B1A983E23277E61434D0AC /* ConnectivityReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70C6A1666704E178D26DE6DA /* ConnectivityReport.swift */; };
 		3E423C5922FF3850D3D9DCAB /* RideSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2BE76BA7459088BB7CC1DCB /* RideSession.swift */; };
 		438458A0BDBED5DA4DAF45FF /* LocationPermissionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = F50DF6580FF822DC0B8CAFB1 /* LocationPermissionMonitor.swift */; };
 		4EAF2C05DBAD38E0045B5213 /* RideRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC91F5D19C33E229B10A2648 /* RideRecorder.swift */; };
+		5A51A18C41633BB5A5BDE5F6 /* RouteFinderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D8DACF53154C71D704A7E7E /* RouteFinderTests.swift */; };
 		5A9E7137E68D2F188228B153 /* RouteDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EE07731C2129377853D00AF /* RouteDetailView.swift */; };
 		609589DFF688723AC1777485 /* BikeRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = 92290381360B3409E835DAD8 /* BikeRoute.swift */; };
 		6AF593476F119894C601FA6D /* BikeNoCoApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5FCDB19D449C57BF234CBB5 /* BikeNoCoApp.swift */; };
+		7293116296BBD2EBF379BDD9 /* UnionFind.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8014567F8259AB7613701200 /* UnionFind.swift */; };
+		75315D02CEE4A4FB84DF6B5F /* BikeNetworkGraphBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 64DE559358626BDA8957B9F0 /* BikeNetworkGraphBuilder.swift */; };
 		7DB57737015677EE163EBB14 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B1B0727BC7CB18D6683B199C /* Assets.xcassets */; };
+		7F45C4D432BB457DAA319836 /* RouteFinder.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA717D9F36FE199AF60B39E8 /* RouteFinder.swift */; };
+		875820CE250130001946BA59 /* PlannedRoute.swift in Sources */ = {isa = PBXBuildFile; fileRef = F7A8F263F282BA9F57274B78 /* PlannedRoute.swift */; };
+		96E7DF60627E049AA6EA81EB /* SpatialGrid.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8480FCE719B4E80043C6C77E /* SpatialGrid.swift */; };
+		9D484350CD6DEA2B45BDAA32 /* BikeNetworkGraph.swift in Sources */ = {isa = PBXBuildFile; fileRef = CCB8BEDE44A9A492E389C06E /* BikeNetworkGraph.swift */; };
+		9E1D640CD64C31024B96CAA5 /* BikeNoCoTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D988F41A127CDDA3C564BD28 /* BikeNoCoTests.swift */; };
 		B6C8E14D808B9A52327BFBE2 /* FilterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A389785ACF9C040E0788408 /* FilterView.swift */; };
 		BD8FA9D3F4E3B418D2CB2424 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 02155B5A37FB5708B98DEAAE /* PrivacyInfo.xcprivacy */; };
 		C8E7C0BF312D0476B9C6458C /* RideWithGPSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3CD5156F33A5C84AD468C9A /* RideWithGPSService.swift */; };
+		E7A5CB57E86E21ABEEBC57FD /* RoutingProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F0367CFBB9BD3A1A26978B5 /* RoutingProfile.swift */; };
 		ED2C3F00D35FE38E5A7668AB /* ArcGISService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 096E9CE8C42397E25DB46AF4 /* ArcGISService.swift */; };
 		FB4229EAF1A84CE535CC5399 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA0BF59DD21E924AA407D3DC /* ContentView.swift */; };
 		FCEE217F602D357B3E6A54DC /* BikeMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A02D2D53C5CE2844B82804B1 /* BikeMapView.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3FDB31DDB75099BD962EE487 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = FDE6A58F087A7B5633666B84 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 32B37E9D9DD74060AE6BB850;
+			remoteInfo = BikeNoCo;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		02155B5A37FB5708B98DEAAE /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		096E9CE8C42397E25DB46AF4 /* ArcGISService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArcGISService.swift; sourceTree = "<group>"; };
 		0EE07731C2129377853D00AF /* RouteDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteDetailView.swift; sourceTree = "<group>"; };
 		23D12D086FAAD86B982E0596 /* GeoJSONModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeoJSONModels.swift; sourceTree = "<group>"; };
+		2F0367CFBB9BD3A1A26978B5 /* RoutingProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoutingProfile.swift; sourceTree = "<group>"; };
+		4FCA71002713493DC2DD8EC1 /* BikeNoCoTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = BikeNoCoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		55257BE2C112BAB7DEC1A7B5 /* BikeNetworkGraphTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeNetworkGraphTests.swift; sourceTree = "<group>"; };
+		5D8DACF53154C71D704A7E7E /* RouteFinderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteFinderTests.swift; sourceTree = "<group>"; };
+		64DE559358626BDA8957B9F0 /* BikeNetworkGraphBuilder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeNetworkGraphBuilder.swift; sourceTree = "<group>"; };
+		70C6A1666704E178D26DE6DA /* ConnectivityReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityReport.swift; sourceTree = "<group>"; };
 		714A42B522E6FD1502B4C677 /* RideSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideSummaryView.swift; sourceTree = "<group>"; };
+		8014567F8259AB7613701200 /* UnionFind.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UnionFind.swift; sourceTree = "<group>"; };
+		8480FCE719B4E80043C6C77E /* SpatialGrid.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialGrid.swift; sourceTree = "<group>"; };
 		92290381360B3409E835DAD8 /* BikeRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeRoute.swift; sourceTree = "<group>"; };
 		9A389785ACF9C040E0788408 /* FilterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilterView.swift; sourceTree = "<group>"; };
 		A02D2D53C5CE2844B82804B1 /* BikeMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeMapView.swift; sourceTree = "<group>"; };
@@ -43,9 +73,14 @@
 		C5FCDB19D449C57BF234CBB5 /* BikeNoCoApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeNoCoApp.swift; sourceTree = "<group>"; };
 		CA0BF59DD21E924AA407D3DC /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		CBDB9F11B632E0EBA52B559E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		CCB8BEDE44A9A492E389C06E /* BikeNetworkGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeNetworkGraph.swift; sourceTree = "<group>"; };
 		D0CCA8C8AA066008595E4DDB /* MapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapViewModel.swift; sourceTree = "<group>"; };
+		D988F41A127CDDA3C564BD28 /* BikeNoCoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeNoCoTests.swift; sourceTree = "<group>"; };
+		DA717D9F36FE199AF60B39E8 /* RouteFinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteFinder.swift; sourceTree = "<group>"; };
+		E2E3A835D8381429D785A76E /* LocalProjection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalProjection.swift; sourceTree = "<group>"; };
 		ED3169E27185453028E996AE /* BikeNoCo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BikeNoCo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F50DF6580FF822DC0B8CAFB1 /* LocationPermissionMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPermissionMonitor.swift; sourceTree = "<group>"; };
+		F7A8F263F282BA9F57274B78 /* PlannedRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannedRoute.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -78,12 +113,29 @@
 			path = Services;
 			sourceTree = "<group>";
 		};
+		3BA16EB70545A5F223B71660 /* Routing */ = {
+			isa = PBXGroup;
+			children = (
+				CCB8BEDE44A9A492E389C06E /* BikeNetworkGraph.swift */,
+				64DE559358626BDA8957B9F0 /* BikeNetworkGraphBuilder.swift */,
+				70C6A1666704E178D26DE6DA /* ConnectivityReport.swift */,
+				E2E3A835D8381429D785A76E /* LocalProjection.swift */,
+				F7A8F263F282BA9F57274B78 /* PlannedRoute.swift */,
+				DA717D9F36FE199AF60B39E8 /* RouteFinder.swift */,
+				2F0367CFBB9BD3A1A26978B5 /* RoutingProfile.swift */,
+				8480FCE719B4E80043C6C77E /* SpatialGrid.swift */,
+				8014567F8259AB7613701200 /* UnionFind.swift */,
+			);
+			path = Routing;
+			sourceTree = "<group>";
+		};
 		597473CD353385C49683296C /* BikeNoCo */ = {
 			isa = PBXGroup;
 			children = (
 				08F1284E6286FEB6CB697CB6 /* App */,
 				6A916ED93029C74A5A47AD69 /* Models */,
 				1C05302F667B3102ED33F660 /* Resources */,
+				3BA16EB70545A5F223B71660 /* Routing */,
 				28689FFD714D5AAE272C592F /* Services */,
 				C1506714734A607F8D287A6F /* ViewModels */,
 				D32AE63040431F96D7EC2897 /* Views */,
@@ -95,6 +147,7 @@
 			isa = PBXGroup;
 			children = (
 				597473CD353385C49683296C /* BikeNoCo */,
+				8FAC5B6943F42B849E602372 /* BikeNoCoTests */,
 				CC033AD9EF5CB2549132EDB5 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -109,6 +162,16 @@
 			path = Models;
 			sourceTree = "<group>";
 		};
+		8FAC5B6943F42B849E602372 /* BikeNoCoTests */ = {
+			isa = PBXGroup;
+			children = (
+				55257BE2C112BAB7DEC1A7B5 /* BikeNetworkGraphTests.swift */,
+				D988F41A127CDDA3C564BD28 /* BikeNoCoTests.swift */,
+				5D8DACF53154C71D704A7E7E /* RouteFinderTests.swift */,
+			);
+			path = BikeNoCoTests;
+			sourceTree = "<group>";
+		};
 		C1506714734A607F8D287A6F /* ViewModels */ = {
 			isa = PBXGroup;
 			children = (
@@ -121,6 +184,7 @@
 			isa = PBXGroup;
 			children = (
 				ED3169E27185453028E996AE /* BikeNoCo.app */,
+				4FCA71002713493DC2DD8EC1 /* BikeNoCoTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -159,6 +223,24 @@
 			productReference = ED3169E27185453028E996AE /* BikeNoCo.app */;
 			productType = "com.apple.product-type.application";
 		};
+		54DC84220995FC858EFB7A99 /* BikeNoCoTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 65C58E1DCC7CBAC5A5F15AEF /* Build configuration list for PBXNativeTarget "BikeNoCoTests" */;
+			buildPhases = (
+				4D118EEC40355B2AF64D99B4 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0A4B60E555376F9B42C482E1 /* PBXTargetDependency */,
+			);
+			name = BikeNoCoTests;
+			packageProductDependencies = (
+			);
+			productName = BikeNoCoTests;
+			productReference = 4FCA71002713493DC2DD8EC1 /* BikeNoCoTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -169,6 +251,10 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					32B37E9D9DD74060AE6BB850 = {
+						DevelopmentTeam = ZTL3N8J879;
+						ProvisioningStyle = Automatic;
+					};
+					54DC84220995FC858EFB7A99 = {
 						DevelopmentTeam = ZTL3N8J879;
 						ProvisioningStyle = Automatic;
 					};
@@ -189,6 +275,7 @@
 			projectRoot = "";
 			targets = (
 				32B37E9D9DD74060AE6BB850 /* BikeNoCo */,
+				54DC84220995FC858EFB7A99 /* BikeNoCoTests */,
 			);
 		};
 /* End PBXProject section */
@@ -206,29 +293,56 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		4D118EEC40355B2AF64D99B4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1A187174C4FFD7874DE7E949 /* BikeNetworkGraphTests.swift in Sources */,
+				9E1D640CD64C31024B96CAA5 /* BikeNoCoTests.swift in Sources */,
+				5A51A18C41633BB5A5BDE5F6 /* RouteFinderTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A4B6DCDF15B705587D150859 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				ED2C3F00D35FE38E5A7668AB /* ArcGISService.swift in Sources */,
 				FCEE217F602D357B3E6A54DC /* BikeMapView.swift in Sources */,
+				9D484350CD6DEA2B45BDAA32 /* BikeNetworkGraph.swift in Sources */,
+				75315D02CEE4A4FB84DF6B5F /* BikeNetworkGraphBuilder.swift in Sources */,
 				6AF593476F119894C601FA6D /* BikeNoCoApp.swift in Sources */,
 				609589DFF688723AC1777485 /* BikeRoute.swift in Sources */,
+				39B1A983E23277E61434D0AC /* ConnectivityReport.swift in Sources */,
 				FB4229EAF1A84CE535CC5399 /* ContentView.swift in Sources */,
 				B6C8E14D808B9A52327BFBE2 /* FilterView.swift in Sources */,
 				19A84FEA862E4323E8F74208 /* GeoJSONModels.swift in Sources */,
 				1CB75187825BEE2C1EAA65ED /* LiveRideHUD.swift in Sources */,
+				072E7C12B0498C55F91B4CCD /* LocalProjection.swift in Sources */,
 				438458A0BDBED5DA4DAF45FF /* LocationPermissionMonitor.swift in Sources */,
 				3922BEDC03811F7522DFCF67 /* MapViewModel.swift in Sources */,
+				875820CE250130001946BA59 /* PlannedRoute.swift in Sources */,
 				4EAF2C05DBAD38E0045B5213 /* RideRecorder.swift in Sources */,
 				3E423C5922FF3850D3D9DCAB /* RideSession.swift in Sources */,
 				392ECDD33E4BD17C4BCF6BAE /* RideSummaryView.swift in Sources */,
 				C8E7C0BF312D0476B9C6458C /* RideWithGPSService.swift in Sources */,
 				5A9E7137E68D2F188228B153 /* RouteDetailView.swift in Sources */,
+				7F45C4D432BB457DAA319836 /* RouteFinder.swift in Sources */,
+				E7A5CB57E86E21ABEEBC57FD /* RoutingProfile.swift in Sources */,
+				96E7DF60627E049AA6EA81EB /* SpatialGrid.swift in Sources */,
+				7293116296BBD2EBF379BDD9 /* UnionFind.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0A4B60E555376F9B42C482E1 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 32B37E9D9DD74060AE6BB850 /* BikeNoCo */;
+			targetProxy = 3FDB31DDB75099BD962EE487 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		13844C336459A202C9475B35 /* Release */ = {
@@ -254,6 +368,29 @@
 			};
 			name = Release;
 		};
+		286095A70441680DBF2E38D3 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = ZTL3N8J879;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.darmitage.BikeNoCoTests;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BikeNoCo.app/BikeNoCo";
+			};
+			name = Debug;
+		};
 		52697773E786E09FFD5E3D3D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -276,6 +413,29 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
+		};
+		68DE3D90BFCAB6CCE80A9156 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = ZTL3N8J879;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.darmitage.BikeNoCoTests;
+				SDKROOT = iphoneos;
+				SWIFT_STRICT_CONCURRENCY = minimal;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BikeNoCo.app/BikeNoCo";
+			};
+			name = Release;
 		};
 		73E857ADE66285CDC0620554 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -399,6 +559,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		65C58E1DCC7CBAC5A5F15AEF /* Build configuration list for PBXNativeTarget "BikeNoCoTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				286095A70441680DBF2E38D3 /* Debug */,
+				68DE3D90BFCAB6CCE80A9156 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
 		AA92A3582BFBB370E1A99A2C /* Build configuration list for PBXProject "BikeNoCo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

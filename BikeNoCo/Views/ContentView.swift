@@ -18,10 +18,16 @@ struct ContentView: View {
             BikeMapView(
                 routes: viewModel.filteredRoutes,
                 activeRoute: viewModel.activeRoute,
+                plannedRoute: viewModel.plannedRoute,
+                routeDestination: viewModel.routeDestination,
                 selectedRoute: $selectedRoute,
+                userCoordinate: $viewModel.userCoordinate,
                 mapType: viewModel.mapStyle.mapType,
                 trackingMode: $viewModel.trackingMode,
-                focusRouteID: $viewModel.focusRouteID
+                focusRouteID: $viewModel.focusRouteID,
+                onLongPressDestination: { coordinate in
+                    viewModel.planRoute(to: coordinate)
+                }
             )
             .ignoresSafeArea()
 
@@ -31,6 +37,10 @@ struct ContentView: View {
 
             if let error = viewModel.errorMessage {
                 ErrorBanner(message: error)
+            }
+
+            if let routingError = viewModel.routingError {
+                ErrorBanner(message: routingError.friendlyMessage)
             }
 
             if locationMonitor.isDenied && !locationBannerDismissed {
@@ -102,7 +112,31 @@ struct ContentView: View {
                 .padding(.trailing, 12)
                 .animation(.spring(duration: 0.3), value: isRecording)
             }
+
+            if viewModel.isRouting {
+                VStack {
+                    Spacer()
+                    ProgressView("Finding route…")
+                        .padding(14)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .padding(.bottom, 40)
+                }
+            }
+
+            if let planned = viewModel.plannedRoute {
+                VStack {
+                    Spacer()
+                    PlannedRouteCard(
+                        route: planned,
+                        onClear: { viewModel.clearPlannedRoute() }
+                    )
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 24)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.spring(duration: 0.3), value: viewModel.plannedRoute?.totalDistanceMeters)
         .sheet(isPresented: $showFilters) {
             FilterView(viewModel: viewModel)
         }
@@ -123,6 +157,65 @@ struct ContentView: View {
         .task {
             await viewModel.loadRoutes()
         }
+    }
+}
+
+// MARK: - Planned route card
+
+private struct PlannedRouteCard: View {
+    let route: PlannedRoute
+    let onClear: () -> Void
+
+    private var distanceMiles: String {
+        String(format: "%.1f mi", route.totalDistanceMeters / 1609.344)
+    }
+
+    private var lowStressPercent: String {
+        String(format: "%.0f%% low-stress", route.lowStressShare * 100)
+    }
+
+    private var namesLine: String {
+        let names = route.dominantNames
+        if names.isEmpty { return "Bike network" }
+        return names.joined(separator: " · ")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(distanceMiles)
+                        .font(.title2.bold())
+                    Text(lowStressPercent)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Clear", action: onClear)
+                    .font(.subheadline.weight(.semibold))
+            }
+
+            Text(namesLine)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+
+            Button(action: {}) {
+                Label("Start", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(true)
+            .opacity(0.55)
+
+            Text("Navigation coming soon")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
     }
 }
 
