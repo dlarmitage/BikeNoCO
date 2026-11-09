@@ -54,6 +54,9 @@ struct ContentView: View {
                     elapsed: recorder.elapsedTime,
                     distanceMiles: recorder.liveDistanceMeters / 1609.344,
                     speedMPH: recorder.liveSpeedMPS * 2.23694,
+                    isPaused: recorder.isPaused,
+                    showAutoResumeHint: recorder.isManuallyPaused,
+                    onTogglePause: { recorder.toggleManualPause() },
                     onStop: { recorder.stopRecording() }
                 )
             }
@@ -66,7 +69,7 @@ struct ContentView: View {
                         systemImage: isRecording ? "stop.circle.fill" : "record.circle",
                         tint: .red,
                         isActive: isRecording,
-                        pulse: isRecording
+                        pulse: isRecording && !recorder.isPaused
                     ) {
                         isRecording ? recorder.stopRecording() : recorder.startRecording()
                     }

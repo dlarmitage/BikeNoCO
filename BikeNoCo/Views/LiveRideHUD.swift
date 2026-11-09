@@ -4,18 +4,38 @@ struct LiveRideHUD: View {
     let elapsed: TimeInterval
     let distanceMiles: Double
     let speedMPH: Double
+    var isPaused: Bool = false
+    var showAutoResumeHint: Bool = false
+    let onTogglePause: () -> Void
     let onStop: () -> Void
 
     @State private var pulse = false
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: 6) {
             HStack(spacing: 0) {
-                StatColumn(value: formatTime(elapsed), label: "Duration")
+                StatColumn(value: formatTime(elapsed), label: isPaused ? "Paused" : "Duration")
                 Divider().frame(height: 36)
                 StatColumn(value: String(format: "%.2f", distanceMiles), label: "Miles")
                 Divider().frame(height: 36)
-                StatColumn(value: String(format: "%.1f", speedMPH), label: "mph")
+                StatColumn(
+                    value: isPaused ? "—" : String(format: "%.1f", speedMPH),
+                    label: "mph"
+                )
+
+                Divider().frame(height: 36)
+
+                Button(action: onTogglePause) {
+                    VStack(spacing: 2) {
+                        Image(systemName: isPaused ? "play.circle.fill" : "pause.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundStyle(isPaused ? .green : .orange)
+                        Text(isPaused ? "Resume" : "Pause")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(isPaused ? .green : .orange)
+                    }
+                    .frame(width: 58)
+                }
 
                 Divider().frame(height: 36)
 
@@ -41,13 +61,25 @@ struct LiveRideHUD: View {
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
             .padding(.horizontal, 16)
             .padding(.top, 8)
+            .animation(.easeInOut(duration: 0.25), value: isPaused)
+
+            if showAutoResumeHint {
+                Text("Will resume automatically when you start riding")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 16)
+                    .transition(.opacity)
+            }
 
             Spacer()
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 1).repeatForever(autoreverses: true)) {
-                pulse = true
+                pulse = !isPaused
             }
+        }
+        .onChange(of: isPaused) { _, paused in
+            pulse = !paused
         }
     }
 

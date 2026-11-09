@@ -21,8 +21,9 @@ struct RideSession: Identifiable {
     let elevationGainMeters: Double
     let elevationLossMeters: Double
     let estimatedCalories: Double
+    let movingDuration: TimeInterval
 
-    var duration: TimeInterval { endDate.timeIntervalSince(startDate) }
+    var duration: TimeInterval { movingDuration }
     var distanceMiles: Double   { distanceMeters / 1609.344 }
     var avgSpeedMPH: Double     { avgSpeedMPS * 2.23694 }
     var maxSpeedMPH: Double     { maxSpeedMPS * 2.23694 }
@@ -30,15 +31,19 @@ struct RideSession: Identifiable {
     var elevationLossFeet: Double  { elevationLossMeters * 3.28084 }
     var coordinates: [CLLocationCoordinate2D] { trackPoints.map { $0.coordinate } }
 
-    static func calculate(points: [TrackPoint], start: Date, end: Date) -> RideSession {
+    static func calculate(
+        points: [TrackPoint], start: Date, end: Date, movingDuration: TimeInterval? = nil
+    ) -> RideSession {
         let accurate = points.filter { $0.horizontalAccuracy >= 0 && $0.horizontalAccuracy <= 30 }
+        let activeDuration = movingDuration ?? end.timeIntervalSince(start)
 
         // Distance
         var totalDistance: Double = 0
         guard accurate.count > 1 else {
             return RideSession(id: UUID(), startDate: start, endDate: end, trackPoints: accurate,
                                distanceMeters: 0, avgSpeedMPS: 0, maxSpeedMPS: 0,
-                               elevationGainMeters: 0, elevationLossMeters: 0, estimatedCalories: 0)
+                               elevationGainMeters: 0, elevationLossMeters: 0, estimatedCalories: 0,
+                               movingDuration: activeDuration)
         }
         for i in 1..<accurate.count {
             let a = CLLocation(latitude: accurate[i-1].coordinate.latitude, longitude: accurate[i-1].coordinate.longitude)
@@ -63,8 +68,8 @@ struct RideSession: Identifiable {
             }
         }
 
-        // Calories: MET × 70 kg default × hours
-        let hours = end.timeIntervalSince(start) / 3600
+        // Calories: MET × 70 kg default × hours of moving time
+        let hours = activeDuration / 3600
         let avgMPH = avgSpeed * 2.23694
         let met: Double
         switch avgMPH {
@@ -85,7 +90,8 @@ struct RideSession: Identifiable {
             maxSpeedMPS: maxSpeed,
             elevationGainMeters: gain,
             elevationLossMeters: loss,
-            estimatedCalories: calories
+            estimatedCalories: calories,
+            movingDuration: activeDuration
         )
     }
 }
