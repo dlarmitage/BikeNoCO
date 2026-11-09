@@ -27,6 +27,7 @@ struct PlannedRoute: Equatable {
     let totalDistanceMeters: Double
     let distanceByFacility: [FacilityType: Double]
     let lowStressShare: Double
+    let connectorShare: Double
     let dominantNames: [String]
     let origin: CLLocationCoordinate2D
     let destination: CLLocationCoordinate2D
@@ -35,6 +36,7 @@ struct PlannedRoute: Equatable {
         lhs.edges.map(\.id) == rhs.edges.map(\.id)
             && lhs.totalDistanceMeters == rhs.totalDistanceMeters
             && lhs.lowStressShare == rhs.lowStressShare
+            && lhs.connectorShare == rhs.connectorShare
             && lhs.dominantNames == rhs.dominantNames
             && lhs.origin.latitude == rhs.origin.latitude
             && lhs.origin.longitude == rhs.origin.longitude
@@ -52,10 +54,14 @@ struct PlannedRoute: Equatable {
         var nameDistance: [String: Double] = [:]
         var total = 0.0
         var lowStress = 0.0
+        var connector = 0.0
 
         for edge in edges {
             total += edge.lengthMeters
             distanceByFacility[edge.facilityType, default: 0] += edge.lengthMeters
+            if edge.isConnector {
+                connector += edge.lengthMeters
+            }
             if RoutingProfile.isLowStress(edge) {
                 lowStress += edge.lengthMeters
             }
@@ -81,6 +87,7 @@ struct PlannedRoute: Equatable {
             totalDistanceMeters: total,
             distanceByFacility: distanceByFacility,
             lowStressShare: total > 0 ? lowStress / total : 0,
+            connectorShare: total > 0 ? connector / total : 0,
             dominantNames: Array(dominantNames),
             origin: origin,
             destination: destination

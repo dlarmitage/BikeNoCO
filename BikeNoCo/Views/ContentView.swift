@@ -174,6 +174,11 @@ private struct PlannedRouteCard: View {
         String(format: "%.0f%% low-stress", route.lowStressShare * 100)
     }
 
+    private var connectorPercent: String? {
+        guard route.connectorShare > 0.005 else { return nil }
+        return String(format: "%.0f%% on streets", route.connectorShare * 100)
+    }
+
     private var namesLine: String {
         let names = route.dominantNames
         if names.isEmpty { return "Bike network" }
@@ -189,6 +194,11 @@ private struct PlannedRouteCard: View {
                     Text(lowStressPercent)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+                    if let connectorPercent {
+                        Text(connectorPercent)
+                            .font(.caption)
+                            .foregroundStyle(.tertiary)
+                    }
                 }
                 Spacer()
                 Button("Clear", action: onClear)

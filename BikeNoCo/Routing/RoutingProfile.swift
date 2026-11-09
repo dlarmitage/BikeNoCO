@@ -2,6 +2,9 @@ import Foundation
 
 struct RoutingProfile: Sendable {
     var facilityMultipliers: [FacilityType: Double]
+    var osmClassMultipliers: [OSMHighwayClass: Double]
+    var syntheticAttachmentMultiplier: Double
+    /// Fallback for connector edges without a class (should not happen for OSM edges).
     var connectorMultiplier: Double
     var ltsMultipliers: [Int: Double]
     var maxLTS: Int?
@@ -22,6 +25,21 @@ struct RoutingProfile: Sendable {
             .noBikeFacilities: 2.0,
             .recommendedRide: 10.0
         ],
+        osmClassMultipliers: [
+            .cycleway: 1.2,
+            .path: 1.2,
+            .track: 1.2,
+            .footway: 1.4,
+            .pedestrian: 1.4,
+            .residential: 2.0,
+            .livingStreet: 2.0,
+            .unclassified: 2.2,
+            .service: 2.2,
+            .tertiary: 3.0,
+            .secondary: 4.0,
+            .primary: 6.0
+        ],
+        syntheticAttachmentMultiplier: 1.0,
         connectorMultiplier: 2.5,
         ltsMultipliers: [
             3: 1.5,
@@ -35,6 +53,8 @@ struct RoutingProfile: Sendable {
     /// Smallest facility/connector multiplier in the profile (for an admissible A* heuristic).
     var minimumMultiplier: Double {
         var values = Array(facilityMultipliers.values)
+        values.append(contentsOf: osmClassMultipliers.values)
+        values.append(syntheticAttachmentMultiplier)
         values.append(connectorMultiplier)
         return values.min() ?? 1.0
     }
@@ -50,7 +70,11 @@ struct RoutingProfile: Sendable {
 
         let baseMultiplier: Double
         if edge.isConnector {
-            baseMultiplier = connectorMultiplier
+            if let osmClass = edge.osmClass {
+                baseMultiplier = osmClassMultipliers[osmClass] ?? connectorMultiplier
+            } else {
+                baseMultiplier = syntheticAttachmentMultiplier
+            }
         } else {
             baseMultiplier = facilityMultipliers[edge.facilityType] ?? 1.5
         }
@@ -64,6 +88,7 @@ struct RoutingProfile: Sendable {
     }
 
     static func isLowStress(_ edge: GraphEdge) -> Bool {
+        if edge.isConnector { return false }
         if edge.facilityType == .pavedTrail || edge.facilityType == .naturalTrail {
             return true
         }

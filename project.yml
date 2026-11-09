@@ -11,6 +11,8 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: BikeNoCo
+    resources:
+      - path: BikeNoCo/Resources/osm_connectors.json
     info:
       path: BikeNoCo/Resources/Info.plist
       properties:

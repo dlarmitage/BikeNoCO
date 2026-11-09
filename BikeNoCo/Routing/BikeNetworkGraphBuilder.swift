@@ -17,7 +17,26 @@ struct BikeNetworkGraphBuilder {
     }
 
     static func build(from routes: [BikeRoute], config: Config = Config()) -> BikeNetworkGraph {
-        Engine(config: config).build(from: routes)
+        build(from: routes, connectors: [], config: config).graph
+    }
+
+    static func build(
+        from routes: [BikeRoute],
+        connectors: [OSMConnectorEdge],
+        config: Config = Config()
+    ) -> BikeNetworkGraphBuildResult {
+        let arcgis = Engine(config: config).build(from: routes)
+        if connectors.isEmpty {
+            return BikeNetworkGraphBuildResult(
+                graph: arcgis,
+                crossingsConsidered: 0,
+                crossingsJoined: 0,
+                osmEdgesLoaded: 0,
+                osmEdgesKept: 0,
+                attachmentEdgeCount: 0
+            )
+        }
+        return OSMConnectorMerger.merge(arcgis: arcgis, connectors: connectors)
     }
 }
 

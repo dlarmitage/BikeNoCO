@@ -86,14 +86,25 @@ final class MapViewModel: ObservableObject {
         if !routes.isEmpty {
             let loaded = routes
             Task.detached(priority: .utility) {
+                let connectors: [OSMConnectorEdge]
+                do {
+                    connectors = try OSMConnectorLoader.loadBundled().edges
+                } catch {
+                    NSLog("[BikeNoCo Graph] OSM connectors unavailable: %@", error.localizedDescription)
+                    connectors = []
+                }
                 let buildStart = CFAbsoluteTimeGetCurrent()
-                let graph = BikeNetworkGraphBuilder.build(from: loaded)
+                let result = BikeNetworkGraphBuilder.build(from: loaded, connectors: connectors)
                 let buildElapsed = CFAbsoluteTimeGetCurrent() - buildStart
                 await MainActor.run {
-                    self.networkGraph = graph
+                    self.networkGraph = result.graph
                 }
                 #if DEBUG
-                Self.debugPrintConnectivity(graph: graph, routeCount: loaded.count, buildElapsed: buildElapsed)
+                Self.debugPrintConnectivity(
+                    result: result,
+                    routeCount: loaded.count,
+                    buildElapsed: buildElapsed
+                )
                 #endif
             }
         }
@@ -150,13 +161,25 @@ final class MapViewModel: ObservableObject {
 
     #if DEBUG
     nonisolated private static func debugPrintConnectivity(
-        graph: BikeNetworkGraph,
+        result: BikeNetworkGraphBuildResult,
         routeCount: Int,
         buildElapsed: CFAbsoluteTime
     ) {
-        NSLog("[BikeNoCo Graph] built from %d routes in %.3fs — computing connectivity…", routeCount, buildElapsed)
+        NSLog(
+            "[BikeNoCo Graph] built from %d routes + %d OSM edges (%d kept) in %.3fs — computing connectivity…",
+            routeCount,
+            result.osmEdgesLoaded,
+            result.osmEdgesKept,
+            buildElapsed
+        )
+        NSLog(
+            "[BikeNoCo Graph] crossings considered: %d  joined via OSM: %d  attachment edges: %d",
+            result.crossingsConsidered,
+            result.crossingsJoined,
+            result.attachmentEdgeCount
+        )
         let reportStart = CFAbsoluteTimeGetCurrent()
-        let report = ConnectivityReport.make(from: graph)
+        let report = ConnectivityReport.make(from: result.graph)
         let reportElapsed = CFAbsoluteTimeGetCurrent() - reportStart
         NSLog("%@", report.summary)
         NSLog("[BikeNoCo Graph] build time: %.3fs  report time: %.3fs", buildElapsed, reportElapsed)

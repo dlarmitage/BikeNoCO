@@ -38,6 +38,7 @@ open BikeNoCo.xcodeproj
 - **Fort Collins bike facilities** — [City of Fort Collins ArcGIS REST API](https://services1.arcgis.com/dLpFH5mwVvxSN4OE/arcgis/rest/services)
 - **Loveland bikeways** — [City of Loveland ArcGIS REST API](https://pwmaps.cityofloveland.org/arcgis/rest/services)
 - **Suggested rides** — [RideWithGPS](https://ridewithgps.com) public route API, curated by [BikeForFortCollins.org](https://bikefortcollins.org)
+- **Street connectors** — © OpenStreetMap contributors (ODbL), via Overpass
 
 ## Tech Stack
 

@@ -58,6 +58,14 @@ struct FilterView: View {
                         )
                     }
                 }
+
+                Section {
+                    Text("Bike facilities from the City of Fort Collins and City of Loveland. Suggested rides from RideWithGPS. Street connectors © OpenStreetMap contributors.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } header: {
+                    Text("Data Sources")
+                }
             }
             .navigationTitle("Routes")
             .navigationBarTitleDisplayMode(.inline)
