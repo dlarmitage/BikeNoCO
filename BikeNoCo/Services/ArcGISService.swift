@@ -80,7 +80,8 @@ struct ArcGISService {
             mapSymbolClass: props.mapSymbolClass,
             bikewayName: props.bikewayName.flatMap { $0.isEmpty ? nil : $0 },
             speedLimit: props.speedLimit,
-            paths: paths
+            paths: paths,
+            sourceLayer: "fc_bike_facilities"
         )
     }
 
@@ -139,7 +140,8 @@ struct ArcGISService {
             mapSymbolClass: props.category,
             bikewayName: nil,
             speedLimit: nil,
-            paths: paths
+            paths: paths,
+            sourceLayer: "fc_trails"
         )
     }
 
@@ -174,7 +176,8 @@ struct ArcGISService {
                     id: UUID(), objectId: f.properties?.objectId ?? 0,
                     streetName: (f.properties?.fullStName ?? "").capitalized,
                     facilityType: facilityType,
-                    lts: nil, mapSymbolClass: nil, bikewayName: nil, speedLimit: nil, paths: paths
+                    lts: nil, mapSymbolClass: nil, bikewayName: nil, speedLimit: nil, paths: paths,
+                    sourceLayer: "lv_bikeways_\(layer)"
                 )
             }
     }
@@ -192,7 +195,8 @@ struct ArcGISService {
                     id: UUID(), objectId: f.properties?.objectId ?? 0,
                     streetName: (f.properties?.fullStName ?? "").capitalized,
                     facilityType: .sharrow,
-                    lts: nil, mapSymbolClass: nil, bikewayName: nil, speedLimit: nil, paths: paths
+                    lts: nil, mapSymbolClass: nil, bikewayName: nil, speedLimit: nil, paths: paths,
+                    sourceLayer: "lv_bike_routes"
                 )
             }
     }
@@ -212,7 +216,8 @@ struct ArcGISService {
                     id: UUID(), objectId: p?.objectId ?? 0,
                     streetName: name.capitalized,
                     facilityType: .pavedTrail,
-                    lts: nil, mapSymbolClass: nil, bikewayName: nil, speedLimit: nil, paths: paths
+                    lts: nil, mapSymbolClass: nil, bikewayName: nil, speedLimit: nil, paths: paths,
+                    sourceLayer: "lv_rec_trail"
                 )
             }
     }
@@ -233,7 +238,8 @@ struct ArcGISService {
                     id: UUID(), objectId: p?.objectId ?? 0,
                     streetName: (p?.name ?? "").capitalized,
                     facilityType: isPaved ? .pavedTrail : .naturalTrail,
-                    lts: nil, mapSymbolClass: nil, bikewayName: nil, speedLimit: nil, paths: paths
+                    lts: nil, mapSymbolClass: nil, bikewayName: nil, speedLimit: nil, paths: paths,
+                    sourceLayer: "lv_park_trails"
                 )
             }
     }

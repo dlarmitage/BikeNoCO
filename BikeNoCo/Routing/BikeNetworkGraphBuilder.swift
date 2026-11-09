@@ -25,18 +25,31 @@ struct BikeNetworkGraphBuilder {
         connectors: [OSMConnectorEdge],
         config: Config = Config()
     ) -> BikeNetworkGraphBuildResult {
+        var timing = GraphBuildTiming()
+        let wallStart = CFAbsoluteTimeGetCurrent()
+        let arcgisStart = CFAbsoluteTimeGetCurrent()
         let arcgis = Engine(config: config).build(from: routes)
+        timing.arcgisBuild = CFAbsoluteTimeGetCurrent() - arcgisStart
+
         if connectors.isEmpty {
+            let report = ConnectivityReport.make(from: arcgis)
+            timing.wallClock = CFAbsoluteTimeGetCurrent() - wallStart
             return BikeNetworkGraphBuildResult(
                 graph: arcgis,
                 crossingsConsidered: 0,
                 crossingsJoined: 0,
                 osmEdgesLoaded: 0,
                 osmEdgesKept: 0,
-                attachmentEdgeCount: 0
+                attachmentEdgeCount: 0,
+                componentsAfterPrune: report.componentCount,
+                largestComponentShareAfterPrune: report.largestComponentLengthShare,
+                timing: timing
             )
         }
-        return OSMConnectorMerger.merge(arcgis: arcgis, connectors: connectors)
+        var result = OSMConnectorMerger.merge(arcgis: arcgis, connectors: connectors)
+        result.timing.arcgisBuild = timing.arcgisBuild
+        result.timing.wallClock = CFAbsoluteTimeGetCurrent() - wallStart
+        return result
     }
 }
 
@@ -334,7 +347,9 @@ private struct Engine {
                         lts: polyline.route.lts,
                         name: Self.displayName(for: polyline.route),
                         sourceRouteID: polyline.route.id,
-                        isConnector: false
+                        isConnector: false,
+                        sourceObjectId: polyline.route.objectId,
+                        sourceLayer: polyline.route.sourceLayer
                     )
                     edgesByID[nextEdgeID] = edge
                     adjacency[fromID, default: []].append(nextEdgeID)

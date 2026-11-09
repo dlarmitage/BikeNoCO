@@ -46,9 +46,12 @@ final class MapViewModel: ObservableObject {
     @Published var plannedRoute: PlannedRoute?
     @Published var routingError: RoutingError?
     @Published var isRouting = false
+    /// True only when routing is unavailable because there is no usable cached/built graph yet.
+    @Published var isPreparingRoutes = false
 
     private let service = ArcGISService()
     private var networkGraph: BikeNetworkGraph?
+    private var cachedGraphKey: String?
     private var routeGeneration = 0
 
     var filteredRoutes: [BikeRoute] {
@@ -66,9 +69,26 @@ final class MapViewModel: ObservableObject {
 
     func loadRoutes() async {
         guard routes.isEmpty else { return }
+
+        // Serve a cached graph immediately if present so routing is available during fetch.
+        let cacheLoadStart = CFAbsoluteTimeGetCurrent()
+        if let cached = try? GraphCache.load() {
+            networkGraph = cached.graph
+            cachedGraphKey = cached.key
+            let cacheElapsed = CFAbsoluteTimeGetCurrent() - cacheLoadStart
+            NSLog("[BikeNoCo Graph] loaded cached graph in %.3fs (key prefix %@…)", cacheElapsed, String(cached.key.prefix(8)))
+        } else {
+            isPreparingRoutes = true
+        }
+
         isLoading = true
         loadProgress = 0
         errorMessage = nil
+
+        // Decode bundled OSM while ArcGIS fetch runs so cold rebuild avoids serial decode cost.
+        let osmPreload = Task.detached(priority: .utility) { () -> Result<OSMConnectorFile, Error> in
+            Result { try OSMConnectorLoader.loadBundled() }
+        }
 
         do {
             routes = try await service.fetchAllRoutes { [weak self] progress in
@@ -85,29 +105,78 @@ final class MapViewModel: ObservableObject {
 
         if !routes.isEmpty {
             let loaded = routes
+            let existingKey = cachedGraphKey
             Task.detached(priority: .utility) {
-                let connectors: [OSMConnectorEdge]
-                do {
-                    connectors = try OSMConnectorLoader.loadBundled().edges
-                } catch {
-                    NSLog("[BikeNoCo Graph] OSM connectors unavailable: %@", error.localizedDescription)
-                    connectors = []
-                }
-                let buildStart = CFAbsoluteTimeGetCurrent()
-                let result = BikeNetworkGraphBuilder.build(from: loaded, connectors: connectors)
-                let buildElapsed = CFAbsoluteTimeGetCurrent() - buildStart
-                await MainActor.run {
-                    self.networkGraph = result.graph
-                }
-                #if DEBUG
-                Self.debugPrintConnectivity(
-                    result: result,
-                    routeCount: loaded.count,
-                    buildElapsed: buildElapsed
+                await Self.rebuildGraphIfNeeded(
+                    routes: loaded,
+                    existingKey: existingKey,
+                    osmPreload: osmPreload,
+                    viewModel: self
                 )
-                #endif
+            }
+        } else if networkGraph == nil {
+            isPreparingRoutes = false
+        }
+    }
+
+    private nonisolated static func rebuildGraphIfNeeded(
+        routes: [BikeRoute],
+        existingKey: String?,
+        osmPreload: Task<Result<OSMConnectorFile, Error>, Never>,
+        viewModel: MapViewModel
+    ) async {
+        let decodeStart = CFAbsoluteTimeGetCurrent()
+        let osmFile: OSMConnectorFile
+        do {
+            osmFile = try await osmPreload.value.get()
+        } catch {
+            NSLog("[BikeNoCo Graph] OSM connectors unavailable: %@", error.localizedDescription)
+            await MainActor.run {
+                if viewModel.networkGraph == nil {
+                    viewModel.isPreparingRoutes = false
+                }
+            }
+            return
+        }
+        let decodeElapsed = CFAbsoluteTimeGetCurrent() - decodeStart
+        let key = GraphCache.makeKey(routes: routes, osmTimestamp: osmFile.meta.osmTimestamp)
+
+        if let existingKey, existingKey == key {
+            NSLog("[BikeNoCo Graph] cache key unchanged — skipping rebuild")
+            await MainActor.run {
+                viewModel.isPreparingRoutes = false
+            }
+            return
+        }
+
+        await MainActor.run {
+            if viewModel.networkGraph == nil {
+                viewModel.isPreparingRoutes = true
             }
         }
+
+        let buildStart = CFAbsoluteTimeGetCurrent()
+        var result = BikeNetworkGraphBuilder.build(from: routes, connectors: osmFile.edges)
+        result.timing.osmDecode = decodeElapsed
+        let buildElapsed = CFAbsoluteTimeGetCurrent() - buildStart
+
+        let writeStart = CFAbsoluteTimeGetCurrent()
+        do {
+            try GraphCache.save(graph: result.graph, key: key, osmTimestamp: osmFile.meta.osmTimestamp)
+            result.timing.cacheWrite = CFAbsoluteTimeGetCurrent() - writeStart
+        } catch {
+            NSLog("[BikeNoCo Graph] cache write failed: %@", error.localizedDescription)
+        }
+
+        await MainActor.run {
+            viewModel.networkGraph = result.graph
+            viewModel.cachedGraphKey = key
+            viewModel.isPreparingRoutes = false
+        }
+
+        #if DEBUG
+        Self.debugPrintConnectivity(result: result, routeCount: routes.count, buildElapsed: buildElapsed)
+        #endif
     }
 
     func planRoute(to destination: CLLocationCoordinate2D) {
@@ -178,6 +247,12 @@ final class MapViewModel: ObservableObject {
             result.crossingsJoined,
             result.attachmentEdgeCount
         )
+        NSLog(
+            "[BikeNoCo Graph] after prune: components=%d largest=%.1f%%",
+            result.componentsAfterPrune,
+            result.largestComponentShareAfterPrune * 100
+        )
+        NSLog("%@", result.timing.summary)
         let reportStart = CFAbsoluteTimeGetCurrent()
         let report = ConnectivityReport.make(from: result.graph)
         let reportElapsed = CFAbsoluteTimeGetCurrent() - reportStart

@@ -11,19 +11,45 @@ enum OSMConnectorMerger {
         arcgis: BikeNetworkGraph,
         connectors: [OSMConnectorEdge]
     ) -> BikeNetworkGraphBuildResult {
+        var timing = GraphBuildTiming()
         var state = MutableGraph(from: arcgis)
+
+        let indexStart = CFAbsoluteTimeGetCurrent()
         let osmIndex = OSMNodeIndex(connectors: connectors, projection: arcgis.projection)
+        timing.other += CFAbsoluteTimeGetCurrent() - indexStart
 
-        let (crossingsConsidered, crossingsJoined) = resolveAtGradeCrossings(
-            state: &state,
-            osmIndex: osmIndex
+        let crossStart = CFAbsoluteTimeGetCurrent()
+        state.ensureArcGISLocalGeometry()
+        let foundCrossings = findArcGISCrossings(
+            edgesByID: state.edgesByID,
+            localGeometry: state.arcGISLocalGeometry
         )
+        let crossingsJoined = applyCrossings(foundCrossings, state: &state, osmIndex: osmIndex)
+        timing.crossingResolution = CFAbsoluteTimeGetCurrent() - crossStart
+        let crossingsConsidered = foundCrossings.count
 
+        let conflateStart = CFAbsoluteTimeGetCurrent()
         state.ensureArcGISSegmentGrid()
-        let kept = connectors.filter { !shouldConflate($0, against: state) }
+        guard let arcgisGrid = state.arcGISSegmentGrid else {
+            return BikeNetworkGraphBuildResult(
+                graph: state.freeze(),
+                crossingsConsidered: crossingsConsidered,
+                crossingsJoined: crossingsJoined,
+                osmEdgesLoaded: connectors.count,
+                osmEdgesKept: 0,
+                attachmentEdgeCount: 0,
+                componentsAfterPrune: 0,
+                largestComponentShareAfterPrune: 0,
+                timing: timing
+            )
+        }
+        let sharedGrid = SharedSegmentGrid(arcgisGrid)
+        let kept = filterNonConflated(connectors, projection: state.projection, grid: sharedGrid)
+        timing.conflation = CFAbsoluteTimeGetCurrent() - conflateStart
         let osmEdgesLoaded = connectors.count
         let osmEdgesKept = kept.count
 
+        let insertStart = CFAbsoluteTimeGetCurrent()
         var osmNodeToGraph: [Int64: Int] = [:]
         for edge in kept {
             ensureOSMNode(edge.startNodeID, coordinate: edge.coordinates.first, osmIndex: osmIndex, map: &osmNodeToGraph, state: &state)
@@ -47,8 +73,20 @@ enum OSMConnectorMerger {
                 osmClass: edge.highwayClass
             )
         }
+        timing.osmInsert = CFAbsoluteTimeGetCurrent() - insertStart
 
-        let attachments = attachNetworks(state: &state, osmIndex: osmIndex, osmNodeToGraph: osmNodeToGraph)
+        let attachStart = CFAbsoluteTimeGetCurrent()
+        let attachments = attachNetworks(
+            state: &state,
+            osmIndex: osmIndex,
+            osmNodeToGraph: osmNodeToGraph,
+            sharedGrid: sharedGrid
+        )
+        timing.attachment = CFAbsoluteTimeGetCurrent() - attachStart
+
+        let pruneStart = CFAbsoluteTimeGetCurrent()
+        let pruneStats = pruneOSMOnlyComponents(state: &state)
+        timing.pruning = CFAbsoluteTimeGetCurrent() - pruneStart
 
         return BikeNetworkGraphBuildResult(
             graph: state.freeze(),
@@ -56,44 +94,93 @@ enum OSMConnectorMerger {
             crossingsJoined: crossingsJoined,
             osmEdgesLoaded: osmEdgesLoaded,
             osmEdgesKept: osmEdgesKept,
-            attachmentEdgeCount: attachments
+            attachmentEdgeCount: attachments,
+            componentsAfterPrune: pruneStats.componentCount,
+            largestComponentShareAfterPrune: pruneStats.largestShare,
+            timing: timing
         )
+    }
+
+    /// Drop every connected component that contains no ArcGIS (non-connector) edge.
+    @discardableResult
+    private static func pruneOSMOnlyComponents(state: inout MutableGraph) -> (componentCount: Int, largestShare: Double) {
+        let nodeIDs = Array(state.nodesByID.keys)
+        guard !nodeIDs.isEmpty else { return (0, 0) }
+
+        var indexOf: [Int: Int] = [:]
+        for (i, id) in nodeIDs.enumerated() {
+            indexOf[id] = i
+        }
+        var uf = UnionFind(count: nodeIDs.count)
+        for edge in state.edgesByID.values {
+            if let a = indexOf[edge.fromID], let b = indexOf[edge.toID] {
+                uf.union(a, b)
+            }
+        }
+
+        var rootHasArcGIS: [Int: Bool] = [:]
+        var lengthByRoot: [Int: Double] = [:]
+        for edge in state.edgesByID.values {
+            guard let root = indexOf[edge.fromID].map({ uf.find($0) }) else { continue }
+            lengthByRoot[root, default: 0] += edge.lengthMeters
+            if !edge.isConnector {
+                rootHasArcGIS[root] = true
+            }
+        }
+
+        var keepRoots: Set<Int> = []
+        for (root, hasArcGIS) in rootHasArcGIS where hasArcGIS {
+            keepRoots.insert(root)
+        }
+
+        let dropNodeIDs: Set<Int> = Set(nodeIDs.enumerated().compactMap { index, id in
+            keepRoots.contains(uf.find(index)) ? nil : id
+        })
+
+        if !dropNodeIDs.isEmpty {
+            let dropEdgeIDs = state.edgesByID.values.compactMap { edge -> Int? in
+                if dropNodeIDs.contains(edge.fromID) || dropNodeIDs.contains(edge.toID) {
+                    return edge.id
+                }
+                return nil
+            }
+            for edgeID in dropEdgeIDs {
+                state.removeEdge(id: edgeID)
+            }
+            for nodeID in dropNodeIDs {
+                state.nodesByID.removeValue(forKey: nodeID)
+                state.nodeLocal.removeValue(forKey: nodeID)
+                state.adjacency.removeValue(forKey: nodeID)
+            }
+        }
+
+        let keptLength = lengthByRoot.filter { keepRoots.contains($0.key) }.values.reduce(0, +)
+        let largest = lengthByRoot.filter { keepRoots.contains($0.key) }.values.max() ?? 0
+        return (keepRoots.count, keptLength > 0 ? largest / keptLength : 0)
     }
 
     // MARK: - Crossing resolution
 
-    private static func resolveAtGradeCrossings(
+    /// Join previously detected ArcGIS X-crossings that have a nearby at-grade OSM junction.
+    private static func applyCrossings(
+        _ crossings: [Crossing],
         state: inout MutableGraph,
         osmIndex: OSMNodeIndex
-    ) -> (considered: Int, joined: Int) {
-        let crossings = findCrossings(in: state)
+    ) -> Int {
         var joined = 0
-
-        // Process farthest-from-endpoint crossings first; re-find after mutations is expensive,
-        // so join using original geometry snapshots and skip edges that were already replaced.
         var removedEdgeIDs: Set<Int> = []
 
         for crossing in crossings {
             if removedEdgeIDs.contains(crossing.edgeAID) || removedEdgeIDs.contains(crossing.edgeBID) {
                 continue
             }
-            guard let candidate = osmIndex.bestAtGradeJunction(near: crossing.point, radius: crossingJoinMeters) else {
+            guard osmIndex.bestAtGradeJunction(near: crossing.point, radius: crossingJoinMeters) != nil else {
                 continue
             }
-
             guard let edgeA = state.edgesByID[crossing.edgeAID],
                   let edgeB = state.edgesByID[crossing.edgeBID] else { continue }
 
             let sharedNodeID = state.addNode(at: crossing.point)
-            // Prefer the OSM junction coordinate if very close — keeps attachment consistent.
-            if candidate.local.distance(to: crossing.point) <= crossingJoinMeters {
-                state.nodesByID[sharedNodeID] = GraphNode(
-                    id: sharedNodeID,
-                    coordinate: state.projection.toCoordinate(crossing.point)
-                )
-                state.nodeLocal[sharedNodeID] = crossing.point
-            }
-
             if splitEdge(edgeA, at: crossing.point, sharedNodeID: sharedNodeID, state: &state) {
                 removedEdgeIDs.insert(edgeA.id)
             }
@@ -103,7 +190,7 @@ enum OSMConnectorMerger {
             joined += 1
         }
 
-        return (crossings.count, joined)
+        return joined
     }
 
     private struct Crossing {
@@ -112,38 +199,51 @@ enum OSMConnectorMerger {
         let point: LocalPoint
     }
 
-    private static func findCrossings(in state: MutableGraph) -> [Crossing] {
+    /// Pair segments that share a grid cell and test only those two segments for a proper hit.
+    /// Crossing geometry occupies at least one shared cell, so no halo walk is required.
+    private static func findArcGISCrossings(
+        edgesByID: [Int: GraphEdge],
+        localGeometry: [Int: [LocalPoint]]
+    ) -> [Crossing] {
         var grid = SpatialGrid<EdgeSeg>(cellSize: 25)
-        var localGeometry: [Int: [LocalPoint]] = [:]
-        for edge in state.edgesByID.values where !edge.isConnector {
-            let points = edge.geometry.map { state.projection.toLocal($0) }
-            localGeometry[edge.id] = points
+        for (edgeID, points) in localGeometry {
             for i in 0..<(points.count - 1) {
-                grid.insertSegment(id: EdgeSeg(edgeID: edge.id, segmentIndex: i), from: points[i], to: points[i + 1])
+                grid.insertSegment(id: EdgeSeg(edgeID: edgeID, segmentIndex: i), from: points[i], to: points[i + 1])
             }
         }
 
         var results: [Crossing] = []
         var seen: Set<EdgePairKey> = []
-        for edge in state.edgesByID.values where !edge.isConnector {
-            guard let points = localGeometry[edge.id] else { continue }
-            for i in 0..<(points.count - 1) {
-                let a1 = points[i]
-                let a2 = points[i + 1]
-                for candidate in grid.segments(alongFrom: a1, to: a2) {
-                    if candidate.id.edgeID <= edge.id { continue }
-                    guard let other = state.edgesByID[candidate.id.edgeID], !other.isConnector else { continue }
-                    if sharesNode(edge, other) { continue }
-                    let key = EdgePairKey(a: edge.id, b: other.id)
+        grid.forEachSegmentCell { records in
+            guard records.count >= 2 else { return }
+            for i in 0..<(records.count - 1) {
+                let a = records[i]
+                for j in (i + 1)..<records.count {
+                    let b = records[j]
+                    if a.id.edgeID == b.id.edgeID { continue }
+                    let key = EdgePairKey(a: a.id.edgeID, b: b.id.edgeID)
                     if seen.contains(key) { continue }
-                    if let hit = LocalProjection.properIntersection(a1: a1, a2: a2, b1: candidate.a, b2: candidate.b) {
+                    guard let edgeA = edgesByID[a.id.edgeID],
+                          let edgeB = edgesByID[b.id.edgeID] else { continue }
+                    if sharesNode(edgeA, edgeB) {
                         seen.insert(key)
-                        results.append(Crossing(edgeAID: edge.id, edgeBID: other.id, point: hit))
+                        continue
                     }
+                    guard let hit = LocalProjection.properIntersection(
+                        a1: a.a, a2: a.b,
+                        b1: b.a, b2: b.b
+                    ) else { continue }
+                    seen.insert(key)
+                    results.append(Crossing(edgeAID: edgeA.id, edgeBID: edgeB.id, point: hit))
                 }
             }
         }
         return results
+    }
+
+    private struct EdgeSeg: Hashable {
+        let edgeID: Int
+        let segmentIndex: Int
     }
 
     @discardableResult
@@ -198,37 +298,63 @@ enum OSMConnectorMerger {
 
     // MARK: - Conflation
 
-    private static func shouldConflate(_ edge: OSMConnectorEdge, against state: MutableGraph) -> Bool {
-        let local = edge.coordinates.map { state.projection.toLocal($0) }
+    private static func filterNonConflated(
+        _ connectors: [OSMConnectorEdge],
+        projection: LocalProjection,
+        grid: SharedSegmentGrid
+    ) -> [OSMConnectorEdge] {
+        let count = connectors.count
+        var dropFlags = [Bool](repeating: false, count: count)
+        dropFlags.withUnsafeMutableBufferPointer { buffer in
+            DispatchQueue.concurrentPerform(iterations: count) { i in
+                buffer[i] = shouldConflate(connectors[i], projection: projection, grid: grid)
+            }
+        }
+        var kept: [OSMConnectorEdge] = []
+        kept.reserveCapacity(count / 2)
+        for i in 0..<count where !dropFlags[i] {
+            kept.append(connectors[i])
+        }
+        return kept
+    }
+
+    /// Sample OSM geometry about every 5 m while walking the polyline once.
+    private static func shouldConflate(
+        _ edge: OSMConnectorEdge,
+        projection: LocalProjection,
+        grid: SharedSegmentGrid
+    ) -> Bool {
+        let local = edge.coordinates.map { projection.toLocal($0) }
         guard local.count >= 2 else { return true }
         let total = polylineLength(local)
         guard total > 0.5 else { return false }
 
         var covered = 0.0
-        var traveled = 0.0
         let step = 5.0
-        var cursor = 0.0
-        while cursor <= total {
-            guard let point = pointAlong(local, distance: cursor) else { break }
-            if nearestArcGISDistance(point, state: state) <= conflationDistanceMeters {
-                let next = min(cursor + step, total)
-                covered += next - cursor
-            }
-            cursor += step
-            traveled = cursor
-        }
-        _ = traveled
-        return (covered / total) >= conflationLengthFraction
-    }
+        var traveled = 0.0
+        var nextSample = 0.0
 
-    private static func nearestArcGISDistance(_ point: LocalPoint, state: MutableGraph) -> Double {
-        guard let grid = state.arcGISSegmentGrid else { return .infinity }
-        let hits = grid.segments(near: point, radius: conflationDistanceMeters)
-        var best = Double.infinity
-        for hit in hits {
-            best = min(best, point.projected(ontoSegmentFrom: hit.a, to: hit.b).distance)
+        for i in 0..<(local.count - 1) {
+            let a = local[i]
+            let b = local[i + 1]
+            let segLen = a.distance(to: b)
+            guard segLen > 1e-9 else { continue }
+
+            while nextSample <= traveled + segLen + 1e-9 {
+                let remainingTotal = total - nextSample
+                if covered / total >= conflationLengthFraction { return true }
+                if (covered + remainingTotal) / total < conflationLengthFraction { return false }
+
+                let t = (nextSample - traveled) / segLen
+                let point = LocalPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
+                if grid.hasSegment(near: point, radius: conflationDistanceMeters) {
+                    covered += min(step, remainingTotal)
+                }
+                nextSample += step
+            }
+            traveled += segLen
         }
-        return best
+        return (covered / total) >= conflationLengthFraction
     }
 
     // MARK: - Attachments
@@ -236,21 +362,21 @@ enum OSMConnectorMerger {
     private static func attachNetworks(
         state: inout MutableGraph,
         osmIndex: OSMNodeIndex,
-        osmNodeToGraph: [Int64: Int]
+        osmNodeToGraph: [Int64: Int],
+        sharedGrid: SharedSegmentGrid
     ) -> Int {
         var count = 0
-        state.ensureArcGISSegmentGrid()
+        var attachedOSMNodes: Set<Int> = []
 
         // ArcGIS node → nearest eligible OSM node within 15 m
         for node in state.nodesByID.values {
-            // Skip nodes that only exist as OSM (heuristic: check if any incident edge is non-connector)
             let incident = state.adjacency[node.id] ?? []
             let hasArcGIS = incident.contains { id in
                 state.edgesByID[id]?.isConnector == false
             }
             guard hasArcGIS else { continue }
 
-            let local = state.projection.toLocal(node.coordinate)
+            let local = state.nodeLocal[node.id] ?? state.projection.toLocal(node.coordinate)
             guard let match = osmIndex.nearestAttachableNode(to: local, radius: nodeAttachMeters),
                   let osmGraphID = osmNodeToGraph[match.osmID] else { continue }
             if osmGraphID == node.id { continue }
@@ -267,35 +393,48 @@ enum OSMConnectorMerger {
                 isConnector: true,
                 osmClass: nil
             )
+            attachedOSMNodes.insert(osmGraphID)
             count += 1
         }
 
         // OSM node → ArcGIS edge interior T-attachment within 8 m.
-        // Collect candidates first, group by edge, then split each edge once.
-        state.ensureArcGISSegmentGrid()
-        guard let grid = state.arcGISSegmentGrid else { return count }
-
-        var candidates: [(osmGraphID: Int, edgeID: Int, point: LocalPoint, distance: Double)] = []
-        for (osmID, graphID) in osmNodeToGraph {
-            guard let info = osmIndex.nodes[osmID], info.isAttachable else { continue }
-            let hits = grid.segments(near: info.local, radius: tAttachMeters)
-            var best: (edgeID: Int, point: LocalPoint, distance: Double)?
-            for hit in hits {
-                guard let edge = state.edgesByID[hit.id], !edge.isConnector else { continue }
-                let projected = info.local.projected(ontoSegmentFrom: hit.a, to: hit.b)
-                guard projected.distance <= tAttachMeters else { continue }
-                let edgeLocal = edge.geometry.map { state.projection.toLocal($0) }
-                guard let along = projectOntoPolyline(projected.point, points: edgeLocal) else { continue }
-                if along.distanceAlong <= 1.0 || along.distanceAlong >= (polylineLength(edgeLocal) - 1.0) {
-                    continue
+        // Collect candidates concurrently, group by edge, then split each edge once.
+        state.ensureArcGISLocalGeometry()
+        let osmEntries = Array(osmNodeToGraph)
+        var candidateSlots: [(osmGraphID: Int, edgeID: Int, point: LocalPoint, distance: Double)?] = Array(
+            repeating: nil,
+            count: osmEntries.count
+        )
+        let edgesByID = state.edgesByID
+        let localGeometry = state.arcGISLocalGeometry
+        let edgeLengths = state.arcGISEdgeLength
+        let skipOSM = attachedOSMNodes
+        candidateSlots.withUnsafeMutableBufferPointer { buffer in
+            DispatchQueue.concurrentPerform(iterations: osmEntries.count) { index in
+                let (osmID, graphID) = osmEntries[index]
+                if skipOSM.contains(graphID) { return }
+                guard let info = osmIndex.nodes[osmID], info.isAttachable else { return }
+                let hits = sharedGrid.segments(near: info.local, radius: tAttachMeters)
+                var best: (edgeID: Int, point: LocalPoint, distance: Double)?
+                for hit in hits {
+                    guard let edge = edgesByID[hit.id], !edge.isConnector else { continue }
+                    let projected = info.local.projected(ontoSegmentFrom: hit.a, to: hit.b)
+                    guard projected.distance <= tAttachMeters else { continue }
+                    guard let edgeLocal = localGeometry[edge.id],
+                          let along = projectOntoPolyline(projected.point, points: edgeLocal) else { continue }
+                    let edgeLen = edgeLengths[edge.id] ?? polylineLength(edgeLocal)
+                    if along.distanceAlong <= 1.0 || along.distanceAlong >= (edgeLen - 1.0) {
+                        continue
+                    }
+                    if let current = best, projected.distance >= current.distance { continue }
+                    best = (edge.id, projected.point, projected.distance)
                 }
-                if let current = best, projected.distance >= current.distance { continue }
-                best = (edge.id, projected.point, projected.distance)
-            }
-            if let hit = best {
-                candidates.append((graphID, hit.edgeID, hit.point, hit.distance))
+                if let hit = best {
+                    buffer[index] = (graphID, hit.edgeID, hit.point, hit.distance)
+                }
             }
         }
+        let candidates = candidateSlots.compactMap { $0 }
 
         let byEdge = Dictionary(grouping: candidates, by: \.edgeID)
         for (edgeID, group) in byEdge {
@@ -439,22 +578,6 @@ enum OSMConnectorMerger {
         return length
     }
 
-    private static func pointAlong(_ points: [LocalPoint], distance: Double) -> LocalPoint? {
-        guard points.count >= 2 else { return points.first }
-        var remaining = distance
-        for i in 0..<(points.count - 1) {
-            let a = points[i]
-            let b = points[i + 1]
-            let seg = a.distance(to: b)
-            if remaining <= seg || i == points.count - 2 {
-                let t = seg > 0 ? remaining / seg : 0
-                return LocalPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
-            }
-            remaining -= seg
-        }
-        return points.last
-    }
-
     private static func projectOntoPolyline(
         _ query: LocalPoint,
         points: [LocalPoint]
@@ -500,11 +623,6 @@ enum OSMConnectorMerger {
         a.fromID == b.fromID || a.fromID == b.toID || a.toID == b.fromID || a.toID == b.toID
     }
 
-    private struct EdgeSeg: Hashable {
-        let edgeID: Int
-        let segmentIndex: Int
-    }
-
     private struct EdgePairKey: Hashable {
         let a: Int
         let b: Int
@@ -531,6 +649,8 @@ private struct MutableGraph {
     var nextEdgeID: Int
     let projection: LocalProjection
     var arcGISSegmentGrid: SpatialGrid<Int>?
+    var arcGISLocalGeometry: [Int: [LocalPoint]] = [:]
+    var arcGISEdgeLength: [Int: Double] = [:]
 
     init(from graph: BikeNetworkGraph) {
         self.nodesByID = graph.nodesByID
@@ -586,7 +706,10 @@ private struct MutableGraph {
         if fromID != toID {
             adjacency[toID, default: []].append(id)
         }
-        arcGISSegmentGrid = nil
+        // Connector inserts do not affect the ArcGIS-only spatial index.
+        if !isConnector {
+            invalidateArcGISIndexes()
+        }
     }
 
     mutating func removeEdge(id: Int) {
@@ -595,19 +718,45 @@ private struct MutableGraph {
         if edge.fromID != edge.toID {
             adjacency[edge.toID] = (adjacency[edge.toID] ?? []).filter { $0 != id }
         }
+        if !edge.isConnector {
+            invalidateArcGISIndexes()
+        }
+    }
+
+    mutating func invalidateArcGISIndexes() {
         arcGISSegmentGrid = nil
+        arcGISLocalGeometry = [:]
+        arcGISEdgeLength = [:]
     }
 
     mutating func ensureArcGISSegmentGrid() {
         if arcGISSegmentGrid != nil { return }
+        ensureArcGISLocalGeometry()
         var grid = SpatialGrid<Int>(cellSize: 25)
-        for edge in edgesByID.values where !edge.isConnector {
-            let points = edge.geometry.map { projection.toLocal($0) }
+        for (edgeID, points) in arcGISLocalGeometry {
             for i in 0..<(points.count - 1) {
-                grid.insertSegment(id: edge.id, from: points[i], to: points[i + 1])
+                grid.insertSegment(id: edgeID, from: points[i], to: points[i + 1])
             }
         }
         arcGISSegmentGrid = grid
+    }
+
+    mutating func ensureArcGISLocalGeometry() {
+        if !arcGISLocalGeometry.isEmpty { return }
+        var geometry: [Int: [LocalPoint]] = [:]
+        var lengths: [Int: Double] = [:]
+        geometry.reserveCapacity(edgesByID.count)
+        for edge in edgesByID.values where !edge.isConnector {
+            let points = edge.geometry.map { projection.toLocal($0) }
+            geometry[edge.id] = points
+            var length = 0.0
+            for i in 1..<points.count {
+                length += points[i - 1].distance(to: points[i])
+            }
+            lengths[edge.id] = length
+        }
+        arcGISLocalGeometry = geometry
+        arcGISEdgeLength = lengths
     }
 
     func freeze() -> BikeNetworkGraph {
@@ -621,6 +770,25 @@ private struct MutableGraph {
 }
 
 private let osmConnectorSourceID = UUID(uuidString: "A1111111-B222-C333-D444-E55555555555")!
+
+// MARK: - Shared segment grid (concurrent conflation / attachment)
+
+/// Holds an immutable `SpatialGrid` so concurrent workers can share one copy safely.
+private final class SharedSegmentGrid: @unchecked Sendable {
+    private let grid: SpatialGrid<Int>
+
+    init(_ grid: SpatialGrid<Int>) {
+        self.grid = grid
+    }
+
+    func hasSegment(near query: LocalPoint, radius: Double) -> Bool {
+        grid.hasSegment(near: query, radius: radius)
+    }
+
+    func segments(near query: LocalPoint, radius: Double) -> [(id: Int, a: LocalPoint, b: LocalPoint, distance: Double)] {
+        grid.segments(near: query, radius: radius)
+    }
+}
 
 // MARK: - OSM node index
 
@@ -636,6 +804,7 @@ private struct OSMNodeIndex {
     }
 
     let nodes: [Int64: NodeInfo]
+    let atGradeJunctions: [NodeInfo]
     private let pointGrid: SpatialGrid<Int64>
 
     init(connectors: [OSMConnectorEdge], projection: LocalProjection) {
@@ -676,6 +845,7 @@ private struct OSMNodeIndex {
             grid.insertPoint(id: osmID, at: local)
         }
         self.nodes = nodes
+        self.atGradeJunctions = []
         self.pointGrid = grid
     }
 

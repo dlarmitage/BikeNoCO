@@ -48,7 +48,8 @@ struct RideWithGPSService {
             paths: [coords],
             routeDistance: json.distance,
             elevationGain: json.elevationGain,
-            routeDescription: json.description
+            routeDescription: json.description,
+            sourceLayer: "ridewithgps"
         )
     }
 }

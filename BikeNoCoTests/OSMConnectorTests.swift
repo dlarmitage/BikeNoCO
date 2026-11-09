@@ -26,6 +26,7 @@ final class OSMConnectorTests: XCTestCase {
             osmStart: 1,
             osmEnd: 2
         )
+        // Far parallel stays after conflation; link it to the ArcGIS network so pruning keeps it.
         let far = connector(
             from: LocalPoint(x: 0, y: 30),
             to: LocalPoint(x: 200, y: 30),
@@ -33,15 +34,25 @@ final class OSMConnectorTests: XCTestCase {
             osmStart: 3,
             osmEnd: 4
         )
+        let farLink = connector(
+            from: LocalPoint(x: 200, y: 30),
+            to: LocalPoint(x: 200, y: 0),
+            highway: .residential,
+            osmStart: 4,
+            osmEnd: 5
+        )
 
-        let merged = OSMConnectorMerger.merge(arcgis: graph, connectors: [near, far])
-        XCTAssertEqual(merged.osmEdgesLoaded, 2)
-        XCTAssertEqual(merged.osmEdgesKept, 1)
+        let merged = OSMConnectorMerger.merge(arcgis: graph, connectors: [near, far, farLink])
+        XCTAssertEqual(merged.osmEdgesLoaded, 3)
+        XCTAssertEqual(merged.osmEdgesKept, 2)
 
         let keptOSM = merged.graph.edges.filter { $0.isConnector && $0.osmClass != nil }
-        XCTAssertEqual(keptOSM.count, 1)
-        let midY = keptOSM[0].geometry.map { projection.toLocal($0).y }.reduce(0, +) / Double(keptOSM[0].geometry.count)
-        XCTAssertEqual(midY, 30, accuracy: 2)
+        XCTAssertEqual(keptOSM.count, 2)
+        XCTAssertTrue(keptOSM.contains { edge in
+            let ys = edge.geometry.map { projection.toLocal($0).y }
+            let midY = ys.reduce(0, +) / Double(ys.count)
+            return abs(midY - 30) < 2
+        })
     }
 
     func testAttachmentWithinFifteenMetersButNotTwenty() {

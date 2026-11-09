@@ -87,14 +87,31 @@ struct RoutingProfile: Sendable {
         return edge.lengthMeters * baseMultiplier * ltsModifier
     }
 
+    /// Low-stress mileage rule (spec §5 / task 03b):
+    /// - Low-stress: paved/natural trail, ArcGIS LTS ≤ 2, OSM cycleway/path/track,
+    ///   OSM footway/pedestrian, OSM residential/living_street, synthetic attachments.
+    /// - Not low-stress: OSM service/unclassified, tertiary+, ArcGIS LTS 3+,
+    ///   ArcGIS sharrow/no-facility with nil LTS.
     static func isLowStress(_ edge: GraphEdge) -> Bool {
-        if edge.isConnector { return false }
+        if edge.isConnector {
+            guard let osmClass = edge.osmClass else {
+                return true // synthetic attachment
+            }
+            switch osmClass {
+            case .cycleway, .path, .track, .footway, .pedestrian, .residential, .livingStreet:
+                return true
+            case .service, .unclassified, .tertiary, .secondary, .primary:
+                return false
+            }
+        }
+
         if edge.facilityType == .pavedTrail || edge.facilityType == .naturalTrail {
             return true
         }
-        if let lts = edge.lts, lts <= 2 {
-            return true
+        if let lts = edge.lts {
+            return lts <= 2
         }
+        // Nil LTS on non-trail ArcGIS (e.g. sharrow / no facilities) is not low-stress.
         return false
     }
 }

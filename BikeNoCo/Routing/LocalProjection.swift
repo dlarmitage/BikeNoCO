@@ -10,6 +10,12 @@ struct LocalPoint: Equatable {
         hypot(x - other.x, y - other.y)
     }
 
+    func distanceSquared(to other: LocalPoint) -> Double {
+        let dx = x - other.x
+        let dy = y - other.y
+        return dx * dx + dy * dy
+    }
+
     /// Projects this point onto segment `a`→`b`. `t` is clamped to [0, 1].
     func projected(ontoSegmentFrom a: LocalPoint, to b: LocalPoint) -> (point: LocalPoint, t: Double, distance: Double) {
         let abx = b.x - a.x
@@ -23,6 +29,24 @@ struct LocalPoint: Equatable {
         }
         let point = LocalPoint(x: a.x + t * abx, y: a.y + t * aby)
         return (point, t, distance(to: point))
+    }
+
+    /// Squared distance to segment `a`→`b` (avoids `sqrt` on hot conflation paths).
+    func distanceSquared(toSegmentFrom a: LocalPoint, to b: LocalPoint) -> Double {
+        let abx = b.x - a.x
+        let aby = b.y - a.y
+        let lengthSquared = abx * abx + aby * aby
+        let t: Double
+        if lengthSquared < 1e-18 {
+            t = 0
+        } else {
+            t = max(0, min(1, ((x - a.x) * abx + (y - a.y) * aby) / lengthSquared))
+        }
+        let px = a.x + t * abx
+        let py = a.y + t * aby
+        let dx = x - px
+        let dy = y - py
+        return dx * dx + dy * dy
     }
 }
 

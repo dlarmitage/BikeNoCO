@@ -113,6 +113,16 @@ struct ContentView: View {
                 .animation(.spring(duration: 0.3), value: isRecording)
             }
 
+            if viewModel.isPreparingRoutes {
+                VStack {
+                    Spacer()
+                    ProgressView("Preparing routes…")
+                        .padding(14)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .padding(.bottom, viewModel.plannedRoute == nil ? 40 : 160)
+                }
+            }
+
             if viewModel.isRouting {
                 VStack {
                     Spacer()

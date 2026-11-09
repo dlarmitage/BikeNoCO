@@ -69,12 +69,15 @@ struct BikeRoute: Identifiable, Equatable {
     let routeDistance: Double?
     let elevationGain: Double?
     let routeDescription: String?
+    /// Stable layer identity for graph cache keys (not the ephemeral `id` UUID).
+    let sourceLayer: String
 
     init(
         id: UUID, objectId: Int, streetName: String, facilityType: FacilityType,
         lts: Int?, mapSymbolClass: String?, bikewayName: String?, speedLimit: Int?,
         paths: [[CLLocationCoordinate2D]],
-        routeDistance: Double? = nil, elevationGain: Double? = nil, routeDescription: String? = nil
+        routeDistance: Double? = nil, elevationGain: Double? = nil, routeDescription: String? = nil,
+        sourceLayer: String = "unknown"
     ) {
         self.id = id
         self.objectId = objectId
@@ -88,6 +91,7 @@ struct BikeRoute: Identifiable, Equatable {
         self.routeDistance = routeDistance
         self.elevationGain = elevationGain
         self.routeDescription = routeDescription
+        self.sourceLayer = sourceLayer
     }
 
     var formattedDistance: String? {

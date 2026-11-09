@@ -72,6 +72,50 @@ struct SpatialGrid<ID: Hashable> {
         return results
     }
 
+    /// Early-exit probe used by conflation: true if any stored segment is within `radius`.
+    /// Does not dedupe by `ID` — the same edge may contribute many segments, and a far
+    /// segment must not hide a near one.
+    func hasSegment(near query: LocalPoint, radius: Double) -> Bool {
+        let radiusSquared = radius * radius
+        let x0 = Int(floor((query.x - radius) / cellSize))
+        let x1 = Int(floor((query.x + radius) / cellSize))
+        let y0 = Int(floor((query.y - radius) / cellSize))
+        let y1 = Int(floor((query.y + radius) / cellSize))
+        for x in x0...x1 {
+            for y in y0...y1 {
+                guard let records = segmentCells[Cell(x: x, y: y)] else { continue }
+                for record in records {
+                    if query.distanceSquared(toSegmentFrom: record.a, to: record.b) <= radiusSquared {
+                        return true
+                    }
+                }
+            }
+        }
+        return false
+    }
+
+    /// Raw segment records in cells overlapping the query radius (no distance filter).
+    func segmentRecords(near query: LocalPoint, radius: Double) -> [(id: ID, a: LocalPoint, b: LocalPoint)] {
+        var seen: Set<ID> = []
+        var results: [(id: ID, a: LocalPoint, b: LocalPoint)] = []
+        for cell in cellsOverlappingRadius(query, radius: radius) {
+            guard let records = segmentCells[cell] else { continue }
+            for record in records {
+                if seen.contains(record.id) { continue }
+                seen.insert(record.id)
+                results.append((record.id, record.a, record.b))
+            }
+        }
+        return results
+    }
+
+    /// Visit every non-empty segment cell. Used for pairwise crossing detection.
+    func forEachSegmentCell(_ body: ([(id: ID, a: LocalPoint, b: LocalPoint)]) -> Void) {
+        for records in segmentCells.values where records.count >= 2 {
+            body(records.map { ($0.id, $0.a, $0.b) })
+        }
+    }
+
     /// Segments stored in the cells this segment passes through (plus a 1-cell halo so
     /// crossings right on a grid corner are not missed).
     func segments(alongFrom a: LocalPoint, to b: LocalPoint) -> [(id: ID, a: LocalPoint, b: LocalPoint)] {

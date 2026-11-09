@@ -80,7 +80,10 @@ All of `BikeNoCo/Routing/` is pure Swift (Foundation + CoreLocation). Views and 
 - **LTS modifier:** LTS 3 x1.5, LTS 4 x3.0, nil = no modifier. Optional hard cap `maxLTS` removes edges above it.
 - **Heuristic:** straight-line distance x the smallest multiplier in the profile, so it stays admissible.
 - **Snapping:** project origin and destination onto the nearest edge (not just node) within `maxSnapMeters` (default 150 m) and insert temporary virtual nodes. If either fails, return a clear error instead of a bad route.
-- **Output `PlannedRoute`:** ordered edge list, full coordinate list, total distance, distance per facility type, share of low-stress mileage (LTS <= 2 or trail), and a dominant-name summary.
+- **Output `PlannedRoute`:** ordered edge list, full coordinate list, total distance, distance per facility type, share of low-stress mileage, and a dominant-name summary.
+- **Low-stress mileage** (honest mixed ArcGIS + OSM definition):
+  - **Counts as low-stress:** paved/natural trail; ArcGIS with LTS ≤ 2; OSM `cycleway` / `path` / `track`; OSM `footway` / `pedestrian` (bike-allowed connectors); OSM `residential` / `living_street`; synthetic attachment edges.
+  - **Not low-stress:** OSM `service` / `unclassified`; OSM tertiary and above; ArcGIS LTS 3+; ArcGIS sharrow / no-facility / other with nil LTS.
 
 ## 6. OSM connectors (Phase 3)
 
@@ -130,7 +133,8 @@ Built from the edge sequence of a `PlannedRoute`:
 | 1 | `tasks/01-graph-spike.md` | Test target, graph builder, connectivity report |
 | 2 | `tasks/02-astar-routing.md` | Point-to-point routing with preview on the map |
 | 3 | `tasks/03-osm-connectors.md` | Routes start and end anywhere in NoCo |
-| 4 | `tasks/04-maneuvers.md` (to write) | Turn list for a planned route |
+| 3b | `tasks/03b-osm-tuning.md` | Fast cached graph build, pruned islands, honest low-stress metric |
+| 4 | `tasks/04-maneuvers.md` | Turn list for a planned route |
 | 5 | `tasks/05-navigation-engine.md` (to write) | Live turn-by-turn with voice and reroute |
 | 6 | `tasks/06-loop-planner.md` (to write) | Loop planner from the June doc |
 

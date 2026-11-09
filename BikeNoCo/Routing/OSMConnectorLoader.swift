@@ -35,7 +35,24 @@ enum OSMConnectorLoader {
 
     static func decode(_ data: Data) throws -> OSMConnectorFile {
         let raw = try JSONDecoder().decode(RawFile.self, from: data)
-        let edges = try raw.edges.map { try decodeEdge($0) }
+        let rawEdges = raw.edges
+        var decoded = [OSMConnectorEdge?](repeating: nil, count: rawEdges.count)
+        var firstError: Error?
+        let errorLock = NSLock()
+        decoded.withUnsafeMutableBufferPointer { buffer in
+            DispatchQueue.concurrentPerform(iterations: rawEdges.count) { index in
+                do {
+                    buffer[index] = try decodeEdge(rawEdges[index])
+                } catch {
+                    errorLock.lock()
+                    if firstError == nil { firstError = error }
+                    errorLock.unlock()
+                }
+            }
+        }
+        if let firstError { throw firstError }
+        let edges = decoded.compactMap { $0 }
+        guard edges.count == rawEdges.count else { throw LoaderError.missingResource }
         return OSMConnectorFile(
             meta: OSMConnectorFile.Meta(
                 source: raw.meta.source,
