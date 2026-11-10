@@ -112,10 +112,25 @@ struct RouteProgressTracker {
             if along < windowStart - 1e-6 || along > windowEnd + 1e-6 {
                 continue
             }
-            if projected.distance < bestDistance {
+            // When two projections are equally close (typical on out-and-back geometry),
+            // prefer continuing forward along the route over sliding backward on the outbound.
+            if projected.distance < bestDistance - 0.5 {
                 bestDistance = projected.distance
                 bestAlong = along
                 bestSegment = i
+            } else if abs(projected.distance - bestDistance) <= 0.5 {
+                let candidateForward = along >= lastDistanceAlong - 1
+                let bestForward = bestAlong >= lastDistanceAlong - 1
+                if candidateForward && !bestForward {
+                    bestDistance = projected.distance
+                    bestAlong = along
+                    bestSegment = i
+                } else if candidateForward == bestForward,
+                          abs(along - lastDistanceAlong) < abs(bestAlong - lastDistanceAlong) {
+                    bestDistance = projected.distance
+                    bestAlong = along
+                    bestSegment = i
+                }
             }
         }
 

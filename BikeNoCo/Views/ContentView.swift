@@ -230,6 +230,8 @@ struct ContentView: View {
         #if DEBUG
         PlannedRouteCard(
             route: planned,
+            isRoundTrip: viewModel.isRoundTrip,
+            onRoundTripChange: { viewModel.setRoundTrip($0) },
             onClear: { viewModel.clearPlannedRoute() },
             onShowTurns: { showTurnsSheet = true },
             onStart: { startNavigation(route: planned) },
@@ -241,6 +243,8 @@ struct ContentView: View {
         #else
         PlannedRouteCard(
             route: planned,
+            isRoundTrip: viewModel.isRoundTrip,
+            onRoundTripChange: { viewModel.setRoundTrip($0) },
             onClear: { viewModel.clearPlannedRoute() },
             onShowTurns: { showTurnsSheet = true },
             onStart: { startNavigation(route: planned) }
@@ -314,6 +318,8 @@ private struct ShareSheet: UIViewControllerRepresentable {
 
 private struct PlannedRouteCard: View {
     let route: PlannedRoute
+    let isRoundTrip: Bool
+    let onRoundTripChange: (Bool) -> Void
     let onClear: () -> Void
     let onShowTurns: () -> Void
     let onStart: () -> Void
@@ -363,6 +369,15 @@ private struct PlannedRouteCard: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
+
+            Toggle(isOn: Binding(
+                get: { isRoundTrip },
+                set: onRoundTripChange
+            )) {
+                Label("Round trip", systemImage: "arrow.uturn.backward")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .tint(.accentColor)
 
             HStack(spacing: 10) {
                 Button(action: onShowTurns) {

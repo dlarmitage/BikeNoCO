@@ -55,6 +55,7 @@
 		D2C777052F6702BDB410B67B /* OSMConnectorMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EF9259E9BC830F1E71CD4B /* OSMConnectorMerger.swift */; };
 		D98713A1612128E288CB4034 /* RideSimulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A1CB757580DFB0D47FFBAD /* RideSimulator.swift */; };
 		DE1D7BF9135B7BE065057EE1 /* VoiceGuidance.swift in Sources */ = {isa = PBXBuildFile; fileRef = C70216F63B02B68F148718AA /* VoiceGuidance.swift */; };
+		E127E78FDE2734A7602F663C /* RoundTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D971E627483885F624B3D4CF /* RoundTripTests.swift */; };
 		E1D6209CDF9C92DC68E621A1 /* OSMTuningDiagnoseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCCBF64888184CB97E1B61C2 /* OSMTuningDiagnoseTests.swift */; };
 		E79E3C13CCD0D1AC0B027CE0 /* DistanceFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0F31D71AB49F767BAE765500 /* DistanceFormat.swift */; };
 		E7A5CB57E86E21ABEEBC57FD /* RoutingProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F0367CFBB9BD3A1A26978B5 /* RoutingProfile.swift */; };
@@ -126,6 +127,7 @@
 		CCB8BEDE44A9A492E389C06E /* BikeNetworkGraph.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeNetworkGraph.swift; sourceTree = "<group>"; };
 		CCE8D2828C3288EBA4FD2949 /* Maneuver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Maneuver.swift; sourceTree = "<group>"; };
 		D0CCA8C8AA066008595E4DDB /* MapViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MapViewModel.swift; sourceTree = "<group>"; };
+		D971E627483885F624B3D4CF /* RoundTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoundTripTests.swift; sourceTree = "<group>"; };
 		D988F41A127CDDA3C564BD28 /* BikeNoCoTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BikeNoCoTests.swift; sourceTree = "<group>"; };
 		DA717D9F36FE199AF60B39E8 /* RouteFinder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteFinder.swift; sourceTree = "<group>"; };
 		DCCBF64888184CB97E1B61C2 /* OSMTuningDiagnoseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OSMTuningDiagnoseTests.swift; sourceTree = "<group>"; };
@@ -250,6 +252,7 @@
 				DCCBF64888184CB97E1B61C2 /* OSMTuningDiagnoseTests.swift */,
 				7E721438F73A635A140BA78D /* OSMTuningTests.swift */,
 				DCDC388E18CFA83015DB5FCD /* RideRecorderTests.swift */,
+				D971E627483885F624B3D4CF /* RoundTripTests.swift */,
 				5D8DACF53154C71D704A7E7E /* RouteFinderTests.swift */,
 				0DA1250A1CB95C54544C1C71 /* RouteProgressTrackerTests.swift */,
 				4910A8ADE8DD9D4694572CC0 /* UnionFindTests.swift */,
@@ -401,6 +404,7 @@
 				E1D6209CDF9C92DC68E621A1 /* OSMTuningDiagnoseTests.swift in Sources */,
 				3FA2CF30F23F45E0037F0EC3 /* OSMTuningTests.swift in Sources */,
 				F2D3200DD0AC7B00635AB44B /* RideRecorderTests.swift in Sources */,
+				E127E78FDE2734A7602F663C /* RoundTripTests.swift in Sources */,
 				5A51A18C41633BB5A5BDE5F6 /* RouteFinderTests.swift in Sources */,
 				3DFB32573AFBD093D33A4B2B /* RouteProgressTrackerTests.swift in Sources */,
 				96B2C23DB0C3A80E67B85CF1 /* UnionFindTests.swift in Sources */,

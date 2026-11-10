@@ -52,6 +52,7 @@ final class MapViewModel: ObservableObject {
     @Published var userCoordinate: CLLocationCoordinate2D?
     @Published var routeDestination: CLLocationCoordinate2D?
     @Published var plannedRoute: PlannedRoute?
+    @Published var isRoundTrip = false
     @Published var routingError: RoutingError?
     @Published var isRouting = false
     /// True only when routing is unavailable because there is no usable cached/built graph yet.
@@ -61,6 +62,8 @@ final class MapViewModel: ObservableObject {
     private var networkGraph: BikeNetworkGraph?
     private var cachedGraphKey: String?
     private var routeGeneration = 0
+    /// One-way result before round-trip doubling; toggle rebuilds `plannedRoute` from this.
+    private var oneWayPlannedRoute: PlannedRoute?
 
     /// Graph used for planning and live reroutes. Nil until cache/build completes.
     var routingGraph: BikeNetworkGraph? { networkGraph }
@@ -226,6 +229,7 @@ final class MapViewModel: ObservableObject {
         routeDestination = destination
         routingError = nil
         plannedRoute = nil
+        oneWayPlannedRoute = nil
 
         guard let graph = networkGraph else {
             routingError = .noPath(hint: "Bike network is still loading. Try again in a moment.")
@@ -237,6 +241,7 @@ final class MapViewModel: ObservableObject {
         routeGeneration += 1
         let generation = routeGeneration
         let profile = RoutingProfile.default
+        let roundTrip = isRoundTrip
 
         Task.detached(priority: .userInitiated) {
             let result = RouteFinder.route(
@@ -250,9 +255,11 @@ final class MapViewModel: ObservableObject {
                 self.isRouting = false
                 switch result {
                 case .success(let route):
-                    self.plannedRoute = route
+                    self.oneWayPlannedRoute = route
+                    self.plannedRoute = roundTrip ? route.asRoundTrip() : route
                     self.routingError = nil
                 case .failure(let error):
+                    self.oneWayPlannedRoute = nil
                     self.plannedRoute = nil
                     self.routingError = error
                 }
@@ -260,9 +267,16 @@ final class MapViewModel: ObservableObject {
         }
     }
 
+    func setRoundTrip(_ enabled: Bool) {
+        isRoundTrip = enabled
+        guard let oneWay = oneWayPlannedRoute else { return }
+        plannedRoute = enabled ? oneWay.asRoundTrip() : oneWay
+    }
+
     func clearPlannedRoute() {
         routeGeneration += 1
         plannedRoute = nil
+        oneWayPlannedRoute = nil
         routeDestination = nil
         routingError = nil
         isRouting = false

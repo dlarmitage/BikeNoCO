@@ -80,7 +80,130 @@ enum ManeuverBuilder {
         ) ?? 0
     }
 
+    static let roundTripTurnaroundInstruction = "Turn around and head back"
+
     static func build(from route: PlannedRoute) -> [Maneuver] {
+        if route.isRoundTrip,
+           let outboundDistance = route.outboundDistanceMeters,
+           let outboundEdgeCount = route.outboundEdgeCount,
+           outboundEdgeCount > 0,
+           outboundEdgeCount < route.edges.count {
+            return buildRoundTrip(
+                route: route,
+                outboundDistance: outboundDistance,
+                outboundEdgeCount: outboundEdgeCount
+            )
+        }
+        return buildOneWay(from: route)
+    }
+
+    /// Outbound cues, a single turnaround, then return-leg cues with arrive at the origin.
+    private static func buildRoundTrip(
+        route: PlannedRoute,
+        outboundDistance: Double,
+        outboundEdgeCount: Int
+    ) -> [Maneuver] {
+        let outboundEdges = Array(route.edges.prefix(outboundEdgeCount))
+        let returnEdges = Array(route.edges.suffix(from: outboundEdgeCount))
+
+        let turnaroundCoordinate = route.turnaroundCoordinate
+            ?? PolylineSlicer.coordinate(at: outboundDistance, along: route.coordinates)
+            ?? route.coordinates[min(route.coordinates.count / 2, route.coordinates.count - 1)]
+
+        // Slice the real round-trip polyline so neither half includes the 180° cusp
+        // (which would otherwise become a generic "Make a U-turn" cue).
+        let outboundCoords = PolylineSlicer.prefix(
+            coordinates: route.coordinates,
+            untilDistanceAlong: outboundDistance
+        )
+        let returnCoords = PolylineSlicer.remaining(
+            coordinates: route.coordinates,
+            fromDistanceAlong: outboundDistance
+        )
+
+        let outboundRoute = PlannedRoute.make(
+            edges: outboundEdges,
+            coordinates: outboundCoords,
+            origin: route.origin,
+            destination: turnaroundCoordinate
+        )
+        let returnRoute = PlannedRoute.make(
+            edges: returnEdges,
+            coordinates: returnCoords,
+            origin: turnaroundCoordinate,
+            destination: route.destination
+        )
+
+        // Drop arrive on outbound and depart on return; also drop any u-turn that is
+        // really the turnaround cusp (we insert our own cue with the right wording).
+        let turnaroundWindow = max(collapseMeters, 40.0)
+        let outboundManeuvers = buildOneWay(from: outboundRoute).filter { maneuver in
+            if maneuver.type == .arrive { return false }
+            if maneuver.type == .uTurn,
+               abs(maneuver.distanceAlongRoute - outboundDistance) < turnaroundWindow {
+                return false
+            }
+            return true
+        }
+        let returnManeuvers = buildOneWay(from: returnRoute).filter { $0.type != .depart }
+
+        let turnaround = Maneuver(
+            type: .uTurn,
+            coordinate: turnaroundCoordinate,
+            distanceAlongRoute: outboundDistance,
+            distanceToNext: max(0, route.totalDistanceMeters - outboundDistance),
+            streetName: nil,
+            instruction: roundTripTurnaroundInstruction,
+            turnAngleDegrees: 180
+        )
+
+        let shiftedReturn = returnManeuvers.map { maneuver in
+            Maneuver(
+                id: maneuver.id,
+                type: maneuver.type,
+                coordinate: maneuver.coordinate,
+                distanceAlongRoute: maneuver.distanceAlongRoute + outboundDistance,
+                distanceToNext: maneuver.distanceToNext,
+                streetName: maneuver.streetName,
+                instruction: maneuver.instruction,
+                turnAngleDegrees: maneuver.turnAngleDegrees
+            )
+        }
+
+        // Drop return cues that sit on top of the turnaround (including a generic u-turn).
+        let filteredReturn = shiftedReturn.filter { maneuver in
+            if maneuver.type == .arrive { return true }
+            if abs(maneuver.distanceAlongRoute - outboundDistance) < turnaroundWindow {
+                return false
+            }
+            return true
+        }
+
+        var combined = outboundManeuvers + [turnaround] + filteredReturn
+        // Recompute distanceToNext between neighbors.
+        for index in combined.indices {
+            let nextDistance: Double
+            if index + 1 < combined.count {
+                nextDistance = max(0, combined[index + 1].distanceAlongRoute - combined[index].distanceAlongRoute)
+            } else {
+                nextDistance = 0
+            }
+            let current = combined[index]
+            combined[index] = Maneuver(
+                id: current.id,
+                type: current.type,
+                coordinate: current.coordinate,
+                distanceAlongRoute: current.distanceAlongRoute,
+                distanceToNext: nextDistance,
+                streetName: current.streetName,
+                instruction: current.instruction,
+                turnAngleDegrees: current.turnAngleDegrees
+            )
+        }
+        return combined
+    }
+
+    private static func buildOneWay(from route: PlannedRoute) -> [Maneuver] {
         guard !route.edges.isEmpty, route.coordinates.count >= 2 else {
             return [
                 Maneuver(

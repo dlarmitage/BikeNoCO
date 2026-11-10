@@ -52,6 +52,25 @@ struct GraphEdge {
         self.sourceObjectId = sourceObjectId
         self.sourceLayer = sourceLayer
     }
+
+    /// Same edge traversed in the opposite direction (for round-trip return legs).
+    func reversed(id: Int) -> GraphEdge {
+        GraphEdge(
+            id: id,
+            fromID: toID,
+            toID: fromID,
+            lengthMeters: lengthMeters,
+            geometry: Array(geometry.reversed()),
+            facilityType: facilityType,
+            lts: lts,
+            name: name,
+            sourceRouteID: sourceRouteID,
+            isConnector: isConnector,
+            osmClass: osmClass,
+            sourceObjectId: sourceObjectId,
+            sourceLayer: sourceLayer
+        )
+    }
 }
 
 struct GraphBuildTiming: Equatable {

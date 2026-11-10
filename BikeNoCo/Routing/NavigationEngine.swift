@@ -148,11 +148,20 @@ final class NavigationEngine: @unchecked Sendable {
             return
         }
 
-        // Arrival takes priority over off-route when close to destination.
+        // Arrival: require being near the end of the route so round trips don't
+        // "arrive" at the origin while still outbound.
+        if location.horizontalAccuracy >= 0,
+           location.horizontalAccuracy <= Self.maxMatchAccuracyMeters,
+           updated.didMatch,
+           updated.remainingDistance <= Self.arrivalMeters {
+            handleArrival()
+            return
+        }
         if let destination {
             let destLocation = CLLocation(latitude: destination.latitude, longitude: destination.longitude)
             if location.horizontalAccuracy >= 0,
                location.horizontalAccuracy <= Self.maxMatchAccuracyMeters,
+               updated.remainingDistance <= Self.arrivalMeters * 2,
                location.distance(from: destLocation) <= Self.arrivalMeters {
                 handleArrival()
                 return
@@ -244,6 +253,9 @@ final class NavigationEngine: @unchecked Sendable {
         case .sharpRight:
             return "Sharp right"
         case .uTurn:
+            if maneuver.instruction == ManeuverBuilder.roundTripTurnaroundInstruction {
+                return ManeuverBuilder.roundTripTurnaroundInstruction
+            }
             return "Make a U-turn"
         case .arrive:
             return "You have arrived"
