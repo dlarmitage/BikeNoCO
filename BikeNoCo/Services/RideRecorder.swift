@@ -16,8 +16,27 @@ enum RecordingState: Equatable {
     }
 }
 
+struct RideRecorderTiming: Equatable, Sendable {
+    /// Below ~1 mph — treat as stopped (filters GPS jitter at a standstill).
+    var pauseSpeedMPS: Double = 0.5
+    /// Above ~2 mph — treat as riding again after an automatic pause.
+    var resumeSpeedMPS: Double = 1.0
+    /// Above ~5 mph — confirms cycling resumed after a manual pause (ignores walking).
+    var manualResumeSpeedMPS: Double = 2.2
+    /// Seconds of low speed before auto-pausing.
+    var pauseDelay: TimeInterval = 8
+    /// Seconds of movement before auto-resuming.
+    var resumeDelay: TimeInterval = 3
+    /// Minimum displacement to confirm movement when speed is unavailable.
+    var resumeMovementMeters: Double = 5
+    /// Minimum spacing between recorded track points while actively recording.
+    var recordingDistanceFilter: CLLocationDistance = 5
+
+    static let `default` = RideRecorderTiming()
+}
+
 @MainActor
-final class RideRecorder: NSObject, ObservableObject {
+final class RideRecorder: ObservableObject {
     @Published var state: RecordingState = .idle
     @Published private(set) var isManuallyPaused = false
     @Published private(set) var isAutoPaused = false
@@ -27,6 +46,10 @@ final class RideRecorder: NSObject, ObservableObject {
 
     var isPaused: Bool { isManuallyPaused || isAutoPaused }
 
+    private let locationProvider: LocationProvider
+    private let timing: RideRecorderTiming
+    private let now: () -> Date
+    private var locationCancellable: AnyCancellable?
     private var trackPoints: [TrackPoint] = []
     private var startDate: Date?
     private var activeSegmentStart: Date?
@@ -36,44 +59,30 @@ final class RideRecorder: NSObject, ObservableObject {
     private var lastKnownSpeedMPS: Double = 0
     private var lastLocationUpdate: Date?
     private var timer: Timer?
-    private let manager = CLLocationManager()
 
-    /// Below ~1 mph — treat as stopped (filters GPS jitter at a standstill).
-    private static let pauseSpeedMPS: Double = 0.5
-    /// Above ~2 mph — treat as riding again after an automatic pause.
-    private static let resumeSpeedMPS: Double = 1.0
-    /// Above ~5 mph — confirms cycling resumed after a manual pause (ignores walking).
-    private static let manualResumeSpeedMPS: Double = 2.2
-    /// Seconds of low speed before auto-pausing.
-    private static let pauseDelay: TimeInterval = 8
-    /// Seconds of movement before auto-resuming.
-    private static let resumeDelay: TimeInterval = 3
-    /// Minimum displacement to confirm movement when speed is unavailable.
-    private static let resumeMovementMeters: Double = 5
-    private static let recordingDistanceFilter: CLLocationDistance = 5
-
-    override init() {
-        super.init()
-        manager.delegate = self
-        manager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        manager.distanceFilter = 5
-        manager.allowsBackgroundLocationUpdates = true
-        manager.pausesLocationUpdatesAutomatically = false
+    init(
+        locationProvider: LocationProvider,
+        timing: RideRecorderTiming = .default,
+        now: @escaping () -> Date = Date.init
+    ) {
+        self.locationProvider = locationProvider
+        self.timing = timing
+        self.now = now
     }
 
     func startRecording() {
         guard state != .recording else { return }
-        manager.requestWhenInUseAuthorization()
+        locationProvider.requestAuthorizationIfNeeded()
         trackPoints = []
         liveDistanceMeters = 0
         liveSpeedMPS = 0
         elapsedTime = 0
         resetPauseTracking()
-        let now = Date()
-        startDate = now
-        activeSegmentStart = now
-        manager.distanceFilter = Self.recordingDistanceFilter
-        manager.startUpdatingLocation()
+        let start = now()
+        startDate = start
+        activeSegmentStart = start
+        subscribeToLocations()
+        locationProvider.startUpdating(for: self)
         state = .recording
 
         timer?.invalidate()
@@ -95,11 +104,12 @@ final class RideRecorder: NSObject, ObservableObject {
     }
 
     func stopRecording() {
-        manager.stopUpdatingLocation()
+        unsubscribeFromLocations()
+        locationProvider.stopUpdating(for: self)
         timer?.invalidate()
         timer = nil
 
-        let end = Date()
+        let end = now()
         let start = startDate ?? end
         let movingDuration = activeElapsedTime(at: end)
         let session = RideSession.calculate(
@@ -110,7 +120,8 @@ final class RideRecorder: NSObject, ObservableObject {
     }
 
     func discardAndReset() {
-        manager.stopUpdatingLocation()
+        unsubscribeFromLocations()
+        locationProvider.stopUpdating(for: self)
         timer?.invalidate()
         timer = nil
         trackPoints = []
@@ -121,15 +132,57 @@ final class RideRecorder: NSObject, ObservableObject {
         state = .idle
     }
 
+    private func subscribeToLocations() {
+        locationCancellable = locationProvider.locations.sink { [weak self] location in
+            self?.handleLocation(location)
+        }
+    }
+
+    private func unsubscribeFromLocations() {
+        locationCancellable?.cancel()
+        locationCancellable = nil
+    }
+
+    private func handleLocation(_ location: CLLocation) {
+        guard case .recording = state else { return }
+        guard location.horizontalAccuracy >= 0, location.horizontalAccuracy <= 50 else { return }
+
+        let point = TrackPoint(
+            coordinate: location.coordinate,
+            altitude: location.altitude,
+            speed: location.speed,
+            timestamp: location.timestamp,
+            horizontalAccuracy: location.horizontalAccuracy,
+            verticalAccuracy: location.verticalAccuracy
+        )
+
+        evaluateMotion(at: location)
+
+        guard !isPaused else { return }
+
+        if let last = trackPoints.last {
+            let previous = CLLocation(
+                latitude: last.coordinate.latitude,
+                longitude: last.coordinate.longitude
+            )
+            let delta = previous.distance(from: location)
+            // Match prior CLLocationManager distanceFilter=5 behavior while recording.
+            guard delta >= timing.recordingDistanceFilter else { return }
+            liveDistanceMeters += delta
+        }
+        trackPoints.append(point)
+    }
+
     private func tickTimer() {
         guard case .recording = state else { return }
-        elapsedTime = activeElapsedTime(at: Date())
+        let current = now()
+        elapsedTime = activeElapsedTime(at: current)
 
         guard !isPaused else { return }
         guard let lastUpdate = lastLocationUpdate else { return }
-        let idleDuration = Date().timeIntervalSince(lastUpdate)
-        guard idleDuration >= Self.pauseDelay else { return }
-        guard lastKnownSpeedMPS < Self.pauseSpeedMPS else { return }
+        let idleDuration = current.timeIntervalSince(lastUpdate)
+        guard idleDuration >= timing.pauseDelay else { return }
+        guard lastKnownSpeedMPS < timing.pauseSpeedMPS else { return }
         enterAutoPause()
     }
 
@@ -155,23 +208,21 @@ final class RideRecorder: NSObject, ObservableObject {
 
     private func suspendRecording() {
         if let segmentStart = activeSegmentStart {
-            accumulatedActiveTime += Date().timeIntervalSince(segmentStart)
+            accumulatedActiveTime += now().timeIntervalSince(segmentStart)
             activeSegmentStart = nil
         }
         liveSpeedMPS = 0
         stationarySince = nil
         movingSince = nil
-        manager.distanceFilter = kCLDistanceFilterNone
     }
 
     private func resumeRecording() {
         guard isPaused else { return }
         isManuallyPaused = false
         isAutoPaused = false
-        activeSegmentStart = Date()
+        activeSegmentStart = now()
         movingSince = nil
         stationarySince = nil
-        manager.distanceFilter = Self.recordingDistanceFilter
     }
 
     private func resetPauseTracking() {
@@ -189,13 +240,13 @@ final class RideRecorder: NSObject, ObservableObject {
         guard isPaused else { return }
         let isMoving: Bool
         if isManuallyPaused {
-            isMoving = speed >= Self.manualResumeSpeedMPS
+            isMoving = speed >= timing.manualResumeSpeedMPS
         } else {
-            isMoving = speed >= Self.resumeSpeedMPS || movedFromTrack >= Self.resumeMovementMeters
+            isMoving = speed >= timing.resumeSpeedMPS || movedFromTrack >= timing.resumeMovementMeters
         }
         if isMoving {
-            if movingSince == nil { movingSince = Date() }
-            if Date().timeIntervalSince(movingSince!) >= Self.resumeDelay {
+            if movingSince == nil { movingSince = now() }
+            if let since = movingSince, now().timeIntervalSince(since) >= timing.resumeDelay {
                 resumeRecording()
             }
         } else {
@@ -224,9 +275,9 @@ final class RideRecorder: NSObject, ObservableObject {
 
         liveSpeedMPS = speed
 
-        if speed < Self.pauseSpeedMPS {
-            if stationarySince == nil { stationarySince = Date() }
-            if Date().timeIntervalSince(stationarySince!) >= Self.pauseDelay {
+        if speed < timing.pauseSpeedMPS {
+            if stationarySince == nil { stationarySince = now() }
+            if let since = stationarySince, now().timeIntervalSince(since) >= timing.pauseDelay {
                 enterAutoPause()
             }
         } else {
@@ -253,47 +304,4 @@ final class RideRecorder: NSObject, ObservableObject {
         )
         return location.distance(from: lastLocation)
     }
-}
-
-extension RideRecorder: CLLocationManagerDelegate {
-    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        let newPoints = locations
-            .filter { $0.horizontalAccuracy >= 0 && $0.horizontalAccuracy <= 50 }
-            .map {
-                TrackPoint(
-                    coordinate: $0.coordinate,
-                    altitude: $0.altitude,
-                    speed: $0.speed,
-                    timestamp: $0.timestamp,
-                    horizontalAccuracy: $0.horizontalAccuracy,
-                    verticalAccuracy: $0.verticalAccuracy
-                )
-            }
-        guard !newPoints.isEmpty else { return }
-
-        Task { @MainActor in
-            guard case .recording = self.state else { return }
-            for point in newPoints {
-                let location = CLLocation(
-                    coordinate: point.coordinate,
-                    altitude: point.altitude,
-                    horizontalAccuracy: point.horizontalAccuracy,
-                    verticalAccuracy: point.verticalAccuracy,
-                    timestamp: point.timestamp
-                )
-                self.evaluateMotion(at: location)
-
-                guard !self.isPaused else { continue }
-
-                if !self.trackPoints.isEmpty, let last = self.trackPoints.last {
-                    let a = CLLocation(latitude: last.coordinate.latitude, longitude: last.coordinate.longitude)
-                    let b = location
-                    self.liveDistanceMeters += a.distance(from: b)
-                }
-                self.trackPoints.append(point)
-            }
-        }
-    }
-
-    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
 }

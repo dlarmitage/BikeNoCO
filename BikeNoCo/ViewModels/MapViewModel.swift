@@ -62,6 +62,9 @@ final class MapViewModel: ObservableObject {
     private var cachedGraphKey: String?
     private var routeGeneration = 0
 
+    /// Graph used for planning and live reroutes. Nil until cache/build completes.
+    var routingGraph: BikeNetworkGraph? { networkGraph }
+
     var filteredRoutes: [BikeRoute] {
         routes.filter { visibleTypes.contains($0.facilityType) && $0.facilityType != .recommendedRide }
     }

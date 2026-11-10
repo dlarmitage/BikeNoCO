@@ -4,7 +4,9 @@ import MapKit
 struct ContentView: View {
     @StateObject private var viewModel = MapViewModel()
     @StateObject private var locationMonitor = LocationPermissionMonitor()
-    @StateObject private var recorder = RideRecorder()
+    @StateObject private var locationProvider: LocationProvider
+    @StateObject private var recorder: RideRecorder
+    @StateObject private var navigation: NavigationController
     @State private var showFilters = false
     @State private var showStylePicker = false
     @State private var selectedRoute: BikeRoute?
@@ -14,7 +16,15 @@ struct ContentView: View {
     @State private var focusCoordinate: CLLocationCoordinate2D?
     @State private var gpxShareURL: URL?
 
+    init() {
+        let provider = LocationProvider()
+        _locationProvider = StateObject(wrappedValue: provider)
+        _recorder = StateObject(wrappedValue: RideRecorder(locationProvider: provider))
+        _navigation = StateObject(wrappedValue: NavigationController(locationProvider: provider))
+    }
+
     private var isRecording: Bool { recorder.state == .recording }
+    private var isNavigating: Bool { navigation.isNavigating }
 
     var body: some View {
         ZStack {
@@ -23,6 +33,8 @@ struct ContentView: View {
                 activeRoute: viewModel.activeRoute,
                 plannedRoute: viewModel.plannedRoute,
                 routeDestination: viewModel.routeDestination,
+                remainingRouteCoordinates: isNavigating ? navigation.remainingRouteCoordinates : nil,
+                simulatedUserLocation: navigation.isSimulating ? navigation.latestLocation : nil,
                 selectedRoute: $selectedRoute,
                 userCoordinate: $viewModel.userCoordinate,
                 mapType: viewModel.mapStyle.mapType,
@@ -31,6 +43,7 @@ struct ContentView: View {
                 focusCoordinate: $focusCoordinate,
                 cameraCommand: $viewModel.cameraCommand,
                 onLongPressDestination: { coordinate in
+                    guard !isNavigating else { return }
                     viewModel.planRoute(to: coordinate)
                 }
             )
@@ -64,7 +77,18 @@ struct ContentView: View {
                 }
             }
 
-            if isRecording {
+            if isNavigating {
+                NavigationHUD(
+                    nextManeuver: navigation.nextManeuver,
+                    distanceToNextMeters: navigation.progress?.distanceToNextManeuver ?? 0,
+                    remainingDistanceMeters: navigation.remainingDistanceMeters,
+                    eta: navigation.etaDate,
+                    navigationState: navigation.state,
+                    isMuted: navigation.isMuted,
+                    onToggleMute: { navigation.isMuted.toggle() },
+                    onEnd: { endNavigationAndRecording() }
+                )
+            } else if isRecording {
                 LiveRideHUD(
                     elapsed: recorder.elapsedTime,
                     distanceMiles: recorder.liveDistanceMeters / 1609.344,
@@ -86,7 +110,11 @@ struct ContentView: View {
                         isActive: isRecording,
                         pulse: isRecording && !recorder.isPaused
                     ) {
-                        isRecording ? recorder.stopRecording() : recorder.startRecording()
+                        if isRecording {
+                            endNavigationAndRecording()
+                        } else {
+                            recorder.startRecording()
+                        }
                     }
 
                     MapControlButton(
@@ -123,9 +151,9 @@ struct ContentView: View {
                         showFilters = true
                     }
                 }
-                .padding(.top, isRecording ? 90 : 60)
+                .padding(.top, (isRecording || isNavigating) ? 110 : 60)
                 .padding(.trailing, 12)
-                .animation(.spring(duration: 0.3), value: isRecording)
+                .animation(.spring(duration: 0.3), value: isRecording || isNavigating)
             }
 
             if viewModel.isPreparingRoutes {
@@ -148,7 +176,7 @@ struct ContentView: View {
                 }
             }
 
-            if let planned = viewModel.plannedRoute {
+            if let planned = viewModel.plannedRoute, !isNavigating {
                 VStack {
                     Spacer()
                     plannedRouteCard(for: planned)
@@ -159,6 +187,7 @@ struct ContentView: View {
             }
         }
         .animation(.spring(duration: 0.3), value: viewModel.plannedRoute?.totalDistanceMeters)
+        .animation(.spring(duration: 0.3), value: isNavigating)
         .sheet(isPresented: $showFilters) {
             FilterView(viewModel: viewModel)
         }
@@ -203,18 +232,59 @@ struct ContentView: View {
             route: planned,
             onClear: { viewModel.clearPlannedRoute() },
             onShowTurns: { showTurnsSheet = true },
-            onExportGPX: { exportGPX(for: planned) }
+            onStart: { startNavigation(route: planned) },
+            onExportGPX: { exportGPX(for: planned) },
+            onSimulateRide: { injectDetour in
+                startSimulatedNavigation(route: planned, injectDetour: injectDetour)
+            }
         )
         #else
         PlannedRouteCard(
             route: planned,
             onClear: { viewModel.clearPlannedRoute() },
-            onShowTurns: { showTurnsSheet = true }
+            onShowTurns: { showTurnsSheet = true },
+            onStart: { startNavigation(route: planned) }
         )
         #endif
     }
 
+    private func startNavigation(route: PlannedRoute) {
+        guard let graph = viewModel.routingGraph else {
+            viewModel.routingError = .noPath(hint: "Bike network is still loading. Try again in a moment.")
+            return
+        }
+        if recorder.state != .recording {
+            recorder.startRecording()
+        }
+        navigation.start(route: route, graph: graph)
+        viewModel.trackingMode = .followWithHeading
+    }
+
+    private func endNavigationAndRecording() {
+        if navigation.isNavigating {
+            navigation.end()
+        }
+        if recorder.state == .recording {
+            recorder.stopRecording()
+        }
+        if viewModel.trackingMode == .followWithHeading {
+            viewModel.trackingMode = .follow
+        }
+    }
+
     #if DEBUG
+    private func startSimulatedNavigation(route: PlannedRoute, injectDetour: Bool) {
+        guard let graph = viewModel.routingGraph else {
+            viewModel.routingError = .noPath(hint: "Bike network is still loading. Try again in a moment.")
+            return
+        }
+        if recorder.state != .recording {
+            recorder.startRecording()
+        }
+        navigation.startSimulatedRide(route: route, graph: graph, injectDetour: injectDetour)
+        viewModel.trackingMode = .followWithHeading
+    }
+
     private func exportGPX(for route: PlannedRoute) {
         do {
             gpxShareURL = try GPXExporter.writeTemporaryFile(for: route)
@@ -246,7 +316,9 @@ private struct PlannedRouteCard: View {
     let route: PlannedRoute
     let onClear: () -> Void
     let onShowTurns: () -> Void
+    let onStart: () -> Void
     var onExportGPX: (() -> Void)?
+    var onSimulateRide: ((Bool) -> Void)?
 
     private var distanceMiles: String {
         String(format: "%.1f mi", route.totalDistanceMeters / 1609.344)
@@ -299,13 +371,11 @@ private struct PlannedRouteCard: View {
                 }
                 .buttonStyle(.bordered)
 
-                Button(action: {}) {
+                Button(action: onStart) {
                     Label("Start", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(true)
-                .opacity(0.55)
             }
 
             #if DEBUG
@@ -317,12 +387,28 @@ private struct PlannedRouteCard: View {
                 .buttonStyle(.bordered)
                 .font(.footnote)
             }
-            #endif
+            if let onSimulateRide {
+                HStack(spacing: 10) {
+                    Button {
+                        onSimulateRide(false)
+                    } label: {
+                        Label("Simulate Ride", systemImage: "play.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.footnote)
 
-            Text("Navigation coming soon")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .frame(maxWidth: .infinity, alignment: .center)
+                    Button {
+                        onSimulateRide(true)
+                    } label: {
+                        Label("Sim + Detour", systemImage: "arrow.triangle.swap")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .font(.footnote)
+                }
+            }
+            #endif
         }
         .padding(16)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))

@@ -32,6 +32,7 @@ targets:
         NSLocationAlwaysAndWhenInUseUsageDescription: "Used to continue recording your ride when the app is in the background."
         UIBackgroundModes:
           - location
+          - audio
         NSAppTransportSecurity:
           NSAllowsArbitraryLoads: false
     settings:

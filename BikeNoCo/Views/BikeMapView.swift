@@ -6,6 +6,11 @@ struct BikeMapView: UIViewRepresentable {
     let activeRoute: BikeRoute?
     let plannedRoute: PlannedRoute?
     let routeDestination: CLLocationCoordinate2D?
+    /// When navigating, the yet-to-ride portion of the planned route (clears behind the rider).
+    var remainingRouteCoordinates: [CLLocationCoordinate2D]? = nil
+    /// DEBUG ride simulator (or any injected) location — drives a puck because MapKit's blue
+    /// dot only follows the device/simulator CLLocationManager.
+    var simulatedUserLocation: CLLocation? = nil
     @Binding var selectedRoute: BikeRoute?
     @Binding var userCoordinate: CLLocationCoordinate2D?
     let mapType: MKMapType
@@ -62,7 +67,18 @@ struct BikeMapView: UIViewRepresentable {
         c.parent = self
 
         if mapView.mapType != mapType { mapView.mapType = mapType }
-        if mapView.userTrackingMode != trackingMode {
+
+        let usingSimulatedPuck = simulatedUserLocation != nil
+        if mapView.showsUserLocation == usingSimulatedPuck {
+            mapView.showsUserLocation = !usingSimulatedPuck
+        }
+
+        // MapKit tracking only follows the real blue dot — drive the camera ourselves when simulating.
+        if usingSimulatedPuck {
+            if mapView.userTrackingMode != .none {
+                mapView.setUserTrackingMode(.none, animated: false)
+            }
+        } else if mapView.userTrackingMode != trackingMode {
             mapView.setUserTrackingMode(trackingMode, animated: true)
         }
 
@@ -81,7 +97,9 @@ struct BikeMapView: UIViewRepresentable {
         let routeIDs = Set(routes.map { $0.id })
         let routesChanged = routeIDs != c.lastRouteIDs
         let activeChanged = activeRoute?.id != c.lastActiveID
-        let plannedChanged = !Self.sameCoordinates(plannedRoute?.coordinates, c.lastPlannedCoordinates)
+        let displayPlannedCoordinates = remainingRouteCoordinates
+            ?? plannedRoute?.coordinates
+        let plannedChanged = !Self.sameCoordinates(displayPlannedCoordinates, c.lastPlannedCoordinates)
             || !Self.sameCoordinate(routeDestination, c.lastDestination)
 
         // ── Rebuild infrastructure multi-polylines when the route set changes ──
@@ -132,13 +150,14 @@ struct BikeMapView: UIViewRepresentable {
         }
 
         // ── Planned route overlay + destination pin ──
+        // While navigating, `remainingRouteCoordinates` trims the trail behind the rider.
         if plannedChanged {
-            c.lastPlannedCoordinates = plannedRoute?.coordinates
+            c.lastPlannedCoordinates = displayPlannedCoordinates
             c.lastDestination = routeDestination
 
             if let old = c.plannedPolyline { mapView.removeOverlay(old) }
             c.plannedPolyline = nil
-            if let coords = plannedRoute?.coordinates, coords.count >= 2 {
+            if let coords = displayPlannedCoordinates, coords.count >= 2 {
                 let line = MKPolyline(coordinates: coords, count: coords.count)
                 c.plannedPolyline = line
                 mapView.addOverlay(line, level: .aboveLabels)
@@ -156,6 +175,9 @@ struct BikeMapView: UIViewRepresentable {
                 mapView.addAnnotation(annotation)
             }
         }
+
+        // ── Simulated user puck (MapKit blue dot ignores LocationProvider) ──
+        c.updateSimulatedPuck(on: mapView, location: simulatedUserLocation, trackingMode: trackingMode)
 
         // ── Zoom to active route ──
         if let id = focusRouteID, id != c.lastFocusedID {
@@ -236,9 +258,71 @@ struct BikeMapView: UIViewRepresentable {
         var destinationAnnotation: MKPointAnnotation?
         var lastDestination: CLLocationCoordinate2D?
 
+        // DEBUG / injected location puck
+        var simulatedPuck: SimulatedUserAnnotation?
+        private var lastSimulatedCoordinate: CLLocationCoordinate2D?
+
         var lastFocusedID: UUID?
 
         init(parent: BikeMapView) { self.parent = parent }
+
+        func updateSimulatedPuck(
+            on mapView: MKMapView,
+            location: CLLocation?,
+            trackingMode: MKUserTrackingMode
+        ) {
+            guard let location else {
+                if let puck = simulatedPuck {
+                    mapView.removeAnnotation(puck)
+                    simulatedPuck = nil
+                }
+                lastSimulatedCoordinate = nil
+                return
+            }
+
+            let coordinate = location.coordinate
+            if let puck = simulatedPuck {
+                puck.coordinate = coordinate
+                if location.course >= 0 {
+                    puck.course = location.course
+                }
+                if let view = mapView.view(for: puck) as? SimulatedUserAnnotationView {
+                    view.update(from: puck)
+                }
+            } else {
+                let puck = SimulatedUserAnnotation(coordinate: coordinate, course: location.course)
+                simulatedPuck = puck
+                mapView.addAnnotation(puck)
+            }
+
+            DispatchQueue.main.async {
+                self.parent.userCoordinate = coordinate
+            }
+
+            // Follow / heading-up camera for the simulated rider.
+            let movedEnough: Bool = {
+                guard let last = lastSimulatedCoordinate else { return true }
+                let a = CLLocation(latitude: last.latitude, longitude: last.longitude)
+                return a.distance(from: location) >= 2
+            }()
+            lastSimulatedCoordinate = coordinate
+
+            guard movedEnough else { return }
+            switch trackingMode {
+            case .follow:
+                mapView.setCenter(coordinate, animated: true)
+            case .followWithHeading:
+                let camera = MKMapCamera(
+                    lookingAtCenter: coordinate,
+                    fromDistance: max(mapView.camera.centerCoordinateDistance, 450),
+                    pitch: max(mapView.camera.pitch, 45),
+                    heading: location.course >= 0 ? location.course : mapView.camera.heading
+                )
+                mapView.setCamera(camera, animated: true)
+            default:
+                break
+            }
+        }
 
         func mapView(_ mapView: MKMapView, didUpdate userLocation: MKUserLocation) {
             let coordinate = userLocation.coordinate
@@ -316,6 +400,16 @@ struct BikeMapView: UIViewRepresentable {
 
         func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
             if annotation is MKUserLocation { return nil }
+
+            if annotation is SimulatedUserAnnotation {
+                let reuseID = "simulated-user-puck"
+                let view = (mapView.dequeueReusableAnnotationView(withIdentifier: reuseID) as? SimulatedUserAnnotationView)
+                    ?? SimulatedUserAnnotationView(annotation: annotation, reuseIdentifier: reuseID)
+                view.annotation = annotation
+                view.update(from: annotation)
+                return view
+            }
+
             guard annotation === destinationAnnotation else { return nil }
 
             let reuseID = "planned-destination"
@@ -378,6 +472,54 @@ struct BikeMapView: UIViewRepresentable {
             let t = max(0, min(1, ((p.x - a.x)*dx + (p.y - a.y)*dy) / len2))
             return hypot(p.x - (a.x + t*dx), p.y - (a.y + t*dy))
         }
+    }
+}
+
+// MARK: - Simulated user puck
+
+final class SimulatedUserAnnotation: NSObject, MKAnnotation {
+    @objc dynamic var coordinate: CLLocationCoordinate2D
+    var course: CLLocationDirection
+
+    init(coordinate: CLLocationCoordinate2D, course: CLLocationDirection) {
+        self.coordinate = coordinate
+        self.course = course
+        super.init()
+    }
+}
+
+private final class SimulatedUserAnnotationView: MKAnnotationView {
+    private let dot = UIView()
+    private let heading = UIView()
+
+    override init(annotation: MKAnnotation?, reuseIdentifier: String?) {
+        super.init(annotation: annotation, reuseIdentifier: reuseIdentifier)
+        frame = CGRect(x: 0, y: 0, width: 22, height: 22)
+        centerOffset = .zero
+        canShowCallout = false
+
+        dot.backgroundColor = UIColor.systemBlue
+        dot.layer.cornerRadius = 9
+        dot.layer.borderColor = UIColor.white.cgColor
+        dot.layer.borderWidth = 3
+        dot.frame = CGRect(x: 2, y: 2, width: 18, height: 18)
+        addSubview(dot)
+
+        heading.backgroundColor = UIColor.systemBlue
+        heading.frame = CGRect(x: 9, y: -4, width: 4, height: 10)
+        heading.layer.cornerRadius = 1
+        addSubview(heading)
+    }
+
+    required init?(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func update(from annotation: MKAnnotation?) {
+        guard let puck = annotation as? SimulatedUserAnnotation else { return }
+        let radians = CGFloat(puck.course * .pi / 180)
+        transform = CGAffineTransform(rotationAngle: radians)
+        heading.isHidden = puck.course < 0
     }
 }
 
