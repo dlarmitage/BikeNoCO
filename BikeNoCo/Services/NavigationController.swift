@@ -76,7 +76,7 @@ final class NavigationController: ObservableObject {
         latestLocation = nil
         isNavigating = true
         subscribe()
-        locationProvider.startUpdating(for: self)
+        locationProvider.startUpdating(for: self, allowsBackground: true)
         applyIdleTimer(enabled: true)
     }
 

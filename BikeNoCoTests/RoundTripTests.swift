@@ -7,9 +7,12 @@ final class RoundTripTests: XCTestCase {
 
     func testAsRoundTripDoublesDistanceAndStats() {
         let oneWay = straightRoute(length: 400, name: "Trail")
-        let round = oneWay.asRoundTrip()
+        let round = oneWay.asOutAndBack()
 
-        XCTAssertTrue(round.isRoundTrip)
+        XCTAssertTrue(round.isOutAndBack)
+        XCTAssertEqual(round.tripShape, .outAndBack)
+        XCTAssertEqual(round.legs.count, 2)
+        XCTAssertEqual(round.legs[0].edgeCount, oneWay.edges.count)
         XCTAssertEqual(round.outboundDistanceMeters!, oneWay.totalDistanceMeters, accuracy: 0.1)
         XCTAssertEqual(round.outboundEdgeCount, oneWay.edges.count)
         XCTAssertEqual(round.totalDistanceMeters, oneWay.totalDistanceMeters * 2, accuracy: 0.1)
@@ -24,7 +27,7 @@ final class RoundTripTests: XCTestCase {
 
     func testRoundTripManeuversIncludeTurnaroundAndArriveHome() {
         let oneWay = leftTurnRoute()
-        let round = oneWay.asRoundTrip()
+        let round = oneWay.asOutAndBack()
         let maneuvers = ManeuverBuilder.build(from: round)
 
         XCTAssertEqual(maneuvers.first?.type, .depart)
@@ -37,7 +40,7 @@ final class RoundTripTests: XCTestCase {
 
         let turnaround = maneuvers.first { $0.type == .uTurn }
         XCTAssertNotNil(turnaround)
-        XCTAssertEqual(turnaround?.instruction, ManeuverBuilder.roundTripTurnaroundInstruction)
+        XCTAssertEqual(turnaround?.instruction, ManeuverBuilder.outAndBackTurnaroundInstruction)
         XCTAssertEqual(
             turnaround?.distanceAlongRoute ?? -1,
             round.outboundDistanceMeters!,
@@ -45,16 +48,16 @@ final class RoundTripTests: XCTestCase {
         )
 
         // Exactly one turnaround cue.
-        XCTAssertEqual(maneuvers.filter { $0.instruction == ManeuverBuilder.roundTripTurnaroundInstruction }.count, 1)
+        XCTAssertEqual(maneuvers.filter { $0.instruction == ManeuverBuilder.outAndBackTurnaroundInstruction }.count, 1)
     }
 
     func testNavigationSpeaksTurnaroundCue() {
         let oneWay = straightRoute(length: 400, name: "Trail")
-        let round = oneWay.asRoundTrip()
+        let round = oneWay.asOutAndBack()
         let maneuvers = ManeuverBuilder.build(from: round)
         XCTAssertFalse(
             maneuvers.contains {
-                $0.type == .uTurn && $0.instruction != ManeuverBuilder.roundTripTurnaroundInstruction
+                $0.type == .uTurn && $0.instruction != ManeuverBuilder.outAndBackTurnaroundInstruction
             },
             "Round trip should not emit a generic Make-a-U-turn cusp cue: \(maneuvers.map(\.instruction))"
         )
@@ -87,7 +90,7 @@ final class RoundTripTests: XCTestCase {
         engine.update(location: fix(x: outbound - 20, speed: 5))
         XCTAssertTrue(
             prompts.contains {
-                $0.1 == .near && $0.0 == ManeuverBuilder.roundTripTurnaroundInstruction
+                $0.1 == .near && $0.0 == ManeuverBuilder.outAndBackTurnaroundInstruction
             },
             "Expected near turnaround cue, got \(prompts)"
         )
@@ -99,7 +102,7 @@ final class RoundTripTests: XCTestCase {
 
     func testShortRoundTripFirstCueIsTurnAroundNotGenericUTurn() {
         let oneWay = straightRoute(length: 100, name: "Trail")
-        let round = oneWay.asRoundTrip()
+        let round = oneWay.asOutAndBack()
         let maneuvers = ManeuverBuilder.build(from: round)
         let engine = NavigationEngine()
         var prompts: [String] = []
@@ -116,14 +119,14 @@ final class RoundTripTests: XCTestCase {
             "Short round trip spoke generic U-turn: \(prompts)"
         )
         XCTAssertTrue(
-            prompts.contains { $0 == ManeuverBuilder.roundTripTurnaroundInstruction },
+            prompts.contains { $0 == ManeuverBuilder.outAndBackTurnaroundInstruction },
             "Expected turnaround cue, got \(prompts)"
         )
     }
 
     func testProgressTrackerDoesNotJumpAheadOnRoundTrip() {
         let oneWay = straightRoute(length: 400, name: "Trail")
-        let round = oneWay.asRoundTrip()
+        let round = oneWay.asOutAndBack()
         let maneuvers = ManeuverBuilder.build(from: round)
         var tracker = RouteProgressTracker(coordinates: round.coordinates, maneuvers: maneuvers)
 
@@ -142,7 +145,7 @@ final class RoundTripTests: XCTestCase {
 
     func testArrivalOnlyNearEndOfRoundTrip() {
         let oneWay = straightRoute(length: 100, name: "Trail")
-        let round = oneWay.asRoundTrip()
+        let round = oneWay.asOutAndBack()
         let engine = NavigationEngine()
         var arrived = false
         engine.onEvent { event in

@@ -136,6 +136,9 @@ Built from the edge sequence of a `PlannedRoute`:
 | 3b | `tasks/03b-osm-tuning.md` | Fast cached graph build, pruned islands, honest low-stress metric |
 | 4 | `tasks/04-maneuvers.md` | Turn list for a planned route |
 | 5 | `tasks/05-navigation-engine.md` (to write) | Live turn-by-turn with voice and reroute |
-| 6 | `tasks/06-loop-planner.md` (to write) | Loop planner from the June doc |
+| 6a | `tasks/06a-via-point-loop.md` | One way / Out & back / Loop through a pressed point |
+| 6b | `tasks/06b-distance-loop.md` | Distance loop planner ("15 mi from here") |
+| 7 | `tasks/07-ride-log-and-saved-routes.md` | Ride history, saved routes, performance over time |
+| 8 | (to write) | Natural-language ride suggestions (on-device model or Siri) |
 
 Task files for phases 3 to 6 get written after phase 1's connectivity numbers are known, since those numbers shape phase 3.

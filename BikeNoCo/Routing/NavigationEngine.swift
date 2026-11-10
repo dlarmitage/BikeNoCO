@@ -239,6 +239,9 @@ final class NavigationEngine: @unchecked Sendable {
         case .depart:
             return maneuver.instruction
         case .continue:
+            if maneuver.instruction.hasPrefix("Passing") {
+                return maneuver.instruction
+            }
             return "Continue"
         case .slightLeft:
             return "Bear left"
@@ -253,8 +256,8 @@ final class NavigationEngine: @unchecked Sendable {
         case .sharpRight:
             return "Sharp right"
         case .uTurn:
-            if maneuver.instruction == ManeuverBuilder.roundTripTurnaroundInstruction {
-                return ManeuverBuilder.roundTripTurnaroundInstruction
+            if maneuver.instruction == ManeuverBuilder.outAndBackTurnaroundInstruction {
+                return ManeuverBuilder.outAndBackTurnaroundInstruction
             }
             return "Make a U-turn"
         case .arrive:

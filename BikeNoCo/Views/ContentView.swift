@@ -9,6 +9,7 @@ struct ContentView: View {
     @StateObject private var navigation: NavigationController
     @State private var showFilters = false
     @State private var showStylePicker = false
+    @State private var showPlanLoop = false
     @State private var selectedRoute: BikeRoute?
     @State private var locationBannerDismissed = false
     @State private var completedSession: RideSession?
@@ -34,7 +35,7 @@ struct ContentView: View {
                 plannedRoute: viewModel.plannedRoute,
                 routeDestination: viewModel.routeDestination,
                 remainingRouteCoordinates: isNavigating ? navigation.remainingRouteCoordinates : nil,
-                simulatedUserLocation: navigation.isSimulating ? navigation.latestLocation : nil,
+                userPuckLocation: locationProvider.latestLocation,
                 selectedRoute: $selectedRoute,
                 userCoordinate: $viewModel.userCoordinate,
                 mapType: viewModel.mapStyle.mapType,
@@ -124,6 +125,13 @@ struct ContentView: View {
                         viewModel.toggleLocationTracking()
                     }
 
+                    MapControlButton(
+                        systemImage: "arrow.triangle.2.circlepath",
+                        isActive: showPlanLoop
+                    ) {
+                        showPlanLoop = true
+                    }
+
                     MapControlButton(systemImage: "plus.magnifyingglass") {
                         viewModel.trackingMode = .none
                         viewModel.cameraCommand = .zoomIn
@@ -191,6 +199,23 @@ struct ContentView: View {
         .sheet(isPresented: $showFilters) {
             FilterView(viewModel: viewModel)
         }
+        .sheet(isPresented: $showPlanLoop) {
+            PlanLoopSheet(
+                viewModel: viewModel,
+                onClose: { showPlanLoop = false },
+                onPreview: { candidate in
+                    viewModel.selectLoopCandidate(candidate)
+                    showPlanLoop = false
+                },
+                onStart: { candidate in
+                    viewModel.selectLoopCandidate(candidate)
+                    showPlanLoop = false
+                    if let planned = viewModel.plannedRoute {
+                        startNavigation(route: planned)
+                    }
+                }
+            )
+        }
         .sheet(isPresented: $showTurnsSheet) {
             if let planned = viewModel.plannedRoute {
                 ManeuverListSheet(route: planned) { coordinate in
@@ -221,7 +246,16 @@ struct ContentView: View {
         }
         .task {
             locationMonitor.requestWhenInUseIfNeeded()
+            // Keep a live fix for the map puck + routing origin from launch,
+            // not only after the rider starts recording/navigating.
+            locationProvider.requestAuthorizationIfNeeded()
+            locationProvider.startUpdating(for: locationMonitor)
             await viewModel.loadRoutes()
+        }
+        .onChange(of: locationProvider.latestLocation?.timestamp) { _, _ in
+            if let coordinate = locationProvider.latestLocation?.coordinate {
+                viewModel.userCoordinate = coordinate
+            }
         }
     }
 
@@ -230,8 +264,9 @@ struct ContentView: View {
         #if DEBUG
         PlannedRouteCard(
             route: planned,
-            isRoundTrip: viewModel.isRoundTrip,
-            onRoundTripChange: { viewModel.setRoundTrip($0) },
+            tripShape: viewModel.tripShape,
+            showsTripShapePicker: !viewModel.plannedRouteIsDistanceLoop,
+            onTripShapeChange: { viewModel.setTripShape($0) },
             onClear: { viewModel.clearPlannedRoute() },
             onShowTurns: { showTurnsSheet = true },
             onStart: { startNavigation(route: planned) },
@@ -243,8 +278,9 @@ struct ContentView: View {
         #else
         PlannedRouteCard(
             route: planned,
-            isRoundTrip: viewModel.isRoundTrip,
-            onRoundTripChange: { viewModel.setRoundTrip($0) },
+            tripShape: viewModel.tripShape,
+            showsTripShapePicker: !viewModel.plannedRouteIsDistanceLoop,
+            onTripShapeChange: { viewModel.setTripShape($0) },
             onClear: { viewModel.clearPlannedRoute() },
             onShowTurns: { showTurnsSheet = true },
             onStart: { startNavigation(route: planned) }
@@ -318,8 +354,9 @@ private struct ShareSheet: UIViewControllerRepresentable {
 
 private struct PlannedRouteCard: View {
     let route: PlannedRoute
-    let isRoundTrip: Bool
-    let onRoundTripChange: (Bool) -> Void
+    let tripShape: TripShape
+    var showsTripShapePicker: Bool = true
+    let onTripShapeChange: (TripShape) -> Void
     let onClear: () -> Void
     let onShowTurns: () -> Void
     let onStart: () -> Void
@@ -345,6 +382,19 @@ private struct PlannedRouteCard: View {
         return names.joined(separator: " · ")
     }
 
+    private var loopDifferenceLine: String? {
+        guard route.tripShape == .loop, let overlap = route.overlapShare else { return nil }
+        let different = max(0, 1 - overlap) * 100
+        return String(format: "%.0f%% different from the way out", different)
+    }
+
+    private var highOverlapNote: String? {
+        guard route.tripShape == .loop, let overlap = route.overlapShare, overlap > 0.60 else {
+            return nil
+        }
+        return "Few alternate ways back here; much of the return repeats the outbound route."
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
@@ -359,6 +409,11 @@ private struct PlannedRouteCard: View {
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                     }
+                    if let loopDifferenceLine {
+                        Text(loopDifferenceLine)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 Spacer()
                 Button("Clear", action: onClear)
@@ -370,14 +425,27 @@ private struct PlannedRouteCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
-            Toggle(isOn: Binding(
-                get: { isRoundTrip },
-                set: onRoundTripChange
-            )) {
-                Label("Round trip", systemImage: "arrow.uturn.backward")
-                    .font(.subheadline.weight(.semibold))
+            if let highOverlapNote {
+                Text(highOverlapNote)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
             }
-            .tint(.accentColor)
+
+            if showsTripShapePicker {
+                Picker("Trip shape", selection: Binding(
+                    get: { tripShape },
+                    set: onTripShapeChange
+                )) {
+                    ForEach(TripShape.allCases) { shape in
+                        Text(shape.title).tag(shape)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } else if route.tripShape == .loop {
+                Text(String(format: "%.0f%% trail", route.trailShare * 100))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             HStack(spacing: 10) {
                 Button(action: onShowTurns) {

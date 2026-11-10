@@ -82,7 +82,7 @@ final class RideRecorder: ObservableObject {
         startDate = start
         activeSegmentStart = start
         subscribeToLocations()
-        locationProvider.startUpdating(for: self)
+        locationProvider.startUpdating(for: self, allowsBackground: true)
         state = .recording
 
         timer?.invalidate()

@@ -52,16 +52,29 @@ final class MapViewModel: ObservableObject {
     @Published var userCoordinate: CLLocationCoordinate2D?
     @Published var routeDestination: CLLocationCoordinate2D?
     @Published var plannedRoute: PlannedRoute?
-    @Published var isRoundTrip = false
+    @Published var tripShape: TripShape = .oneWay
     @Published var routingError: RoutingError?
     @Published var isRouting = false
     /// True only when routing is unavailable because there is no usable cached/built graph yet.
     @Published var isPreparingRoutes = false
 
+    // Distance-loop planner (task 06b)
+    @Published var loopCandidates: [LoopCandidate] = []
+    @Published var isSearchingLoops = false
+    @Published var loopSearchError: String?
+    @Published var lastLoopSearchSeconds: Double?
+    @Published var lastLoopTimeToFirstSeconds: Double?
+    @Published var loopTargetMiles: Double = 10
+    @Published var loopMaxLTS: Int? = nil
+    @Published var loopPreferTrails = false
+    /// True when `plannedRoute` came from the distance-loop planner (hide via-shape picker).
+    @Published private(set) var plannedRouteIsDistanceLoop = false
+
     private let service = ArcGISService()
     private var networkGraph: BikeNetworkGraph?
     private var cachedGraphKey: String?
     private var routeGeneration = 0
+    private var loopSearchGeneration = 0
     /// One-way result before round-trip doubling; toggle rebuilds `plannedRoute` from this.
     private var oneWayPlannedRoute: PlannedRoute?
 
@@ -241,36 +254,143 @@ final class MapViewModel: ObservableObject {
         routeGeneration += 1
         let generation = routeGeneration
         let profile = RoutingProfile.default
-        let roundTrip = isRoundTrip
+        let shape = tripShape
 
         Task.detached(priority: .userInitiated) {
-            let result = RouteFinder.route(
-                from: origin,
-                to: destination,
+            let result = Self.buildTrip(
+                origin: origin,
+                destination: destination,
                 graph: graph,
-                profile: profile
+                profile: profile,
+                shape: shape
             )
             await MainActor.run {
                 guard generation == self.routeGeneration else { return }
                 self.isRouting = false
                 switch result {
-                case .success(let route):
-                    self.oneWayPlannedRoute = route
-                    self.plannedRoute = roundTrip ? route.asRoundTrip() : route
+                case .success(let built):
+                    self.oneWayPlannedRoute = built.oneWay
+                    self.plannedRoute = built.display
+                    self.plannedRouteIsDistanceLoop = false
                     self.routingError = nil
                 case .failure(let error):
                     self.oneWayPlannedRoute = nil
                     self.plannedRoute = nil
+                    self.plannedRouteIsDistanceLoop = false
                     self.routingError = error
                 }
             }
         }
     }
 
-    func setRoundTrip(_ enabled: Bool) {
-        isRoundTrip = enabled
+    func setTripShape(_ shape: TripShape) {
+        tripShape = shape
+        guard !plannedRouteIsDistanceLoop else { return }
         guard let oneWay = oneWayPlannedRoute else { return }
-        plannedRoute = enabled ? oneWay.asRoundTrip() : oneWay
+        guard let graph = networkGraph else {
+            plannedRoute = applyShape(shape, to: oneWay, graph: nil)
+            return
+        }
+        // Loop needs a fresh return-leg search; out & back / one way are local transforms.
+        if shape == .loop {
+            let destination = routeDestination ?? oneWay.destination
+            let origin = oneWay.origin
+            isRouting = true
+            routeGeneration += 1
+            let generation = routeGeneration
+            let profile = RoutingProfile.default
+            Task.detached(priority: .userInitiated) {
+                let result = Self.buildTrip(
+                    origin: origin,
+                    destination: destination,
+                    graph: graph,
+                    profile: profile,
+                    shape: .loop,
+                    existingOutbound: oneWay
+                )
+                await MainActor.run {
+                    guard generation == self.routeGeneration else { return }
+                    self.isRouting = false
+                    switch result {
+                    case .success(let built):
+                        self.oneWayPlannedRoute = built.oneWay
+                        self.plannedRoute = built.display
+                        self.plannedRouteIsDistanceLoop = false
+                        self.routingError = nil
+                    case .failure(let error):
+                        self.routingError = error
+                    }
+                }
+            }
+            return
+        }
+        plannedRoute = applyShape(shape, to: oneWay, graph: graph)
+        plannedRouteIsDistanceLoop = false
+    }
+
+    private func applyShape(
+        _ shape: TripShape,
+        to oneWay: PlannedRoute,
+        graph: BikeNetworkGraph?
+    ) -> PlannedRoute {
+        switch shape {
+        case .oneWay:
+            return oneWay
+        case .outAndBack:
+            return oneWay.asOutAndBack()
+        case .loop:
+            // Fallback if called without async rebuild — prefer a real loop when graph is present.
+            if let graph {
+                if case .success(let looped) = RouteFinder.loop(outbound: oneWay, graph: graph) {
+                    return looped
+                }
+            }
+            return oneWay.asOutAndBack()
+        }
+    }
+
+    private struct BuiltTrip: Sendable {
+        var oneWay: PlannedRoute
+        var display: PlannedRoute
+    }
+
+    private nonisolated static func buildTrip(
+        origin: CLLocationCoordinate2D,
+        destination: CLLocationCoordinate2D,
+        graph: BikeNetworkGraph,
+        profile: RoutingProfile,
+        shape: TripShape,
+        existingOutbound: PlannedRoute? = nil
+    ) -> Result<BuiltTrip, RoutingError> {
+        let outboundResult: Result<PlannedRoute, RoutingError>
+        if let existingOutbound {
+            outboundResult = .success(existingOutbound)
+        } else {
+            outboundResult = RouteFinder.route(
+                from: origin,
+                to: destination,
+                graph: graph,
+                profile: profile
+            )
+        }
+        switch outboundResult {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let oneWay):
+            switch shape {
+            case .oneWay:
+                return .success(BuiltTrip(oneWay: oneWay, display: oneWay))
+            case .outAndBack:
+                return .success(BuiltTrip(oneWay: oneWay, display: oneWay.asOutAndBack()))
+            case .loop:
+                switch RouteFinder.loop(outbound: oneWay, graph: graph, profile: profile) {
+                case .success(let looped):
+                    return .success(BuiltTrip(oneWay: oneWay, display: looped))
+                case .failure(let error):
+                    return .failure(error)
+                }
+            }
+        }
     }
 
     func clearPlannedRoute() {
@@ -280,6 +400,99 @@ final class MapViewModel: ObservableObject {
         routeDestination = nil
         routingError = nil
         isRouting = false
+        plannedRouteIsDistanceLoop = false
+    }
+
+    /// Origin for distance-loop search: pin if set, else live NoCo fix, else Fort Collins.
+    var loopSearchOrigin: CLLocationCoordinate2D {
+        if let pin = routeDestination {
+            return pin
+        }
+        return routingOrigin
+    }
+
+    var loopSearchUsesPin: Bool { routeDestination != nil }
+
+    func searchLoops() {
+        guard let graph = networkGraph else {
+            loopSearchError = "Bike network is still loading. Try again in a moment."
+            return
+        }
+        let constraints = currentLoopConstraints()
+        isSearchingLoops = true
+        loopSearchError = nil
+        loopCandidates = []
+        lastLoopSearchSeconds = nil
+        lastLoopTimeToFirstSeconds = nil
+        loopSearchGeneration += 1
+        let generation = loopSearchGeneration
+        let profile = RoutingProfile.default
+
+        Task.detached(priority: .userInitiated) {
+            let result = DistanceLoopPlanner.search(
+                constraints: constraints,
+                graph: graph,
+                profile: profile,
+                onShortlistChanged: { shortlist in
+                    Task { @MainActor in
+                        guard generation == self.loopSearchGeneration else { return }
+                        self.loopCandidates = shortlist
+                    }
+                }
+            )
+            await MainActor.run {
+                guard generation == self.loopSearchGeneration else { return }
+                self.isSearchingLoops = false
+                self.lastLoopSearchSeconds = result.elapsedSeconds
+                self.lastLoopTimeToFirstSeconds = result.timeToFirstResultSeconds
+                self.loopCandidates = result.candidates
+                if result.candidates.isEmpty {
+                    self.loopSearchError = "Couldn't find loops near that distance. Try a different length or loosen Max LTS."
+                }
+            }
+        }
+    }
+
+    func refineLoopsShorter() {
+        loopTargetMiles = max(3, loopTargetMiles * 0.8)
+        searchLoops()
+    }
+
+    func refineLoopsLonger() {
+        loopTargetMiles = min(40, loopTargetMiles * 1.2)
+        searchLoops()
+    }
+
+    func refineLoopsMoreTrail() {
+        loopPreferTrails = true
+        searchLoops()
+    }
+
+    func selectLoopCandidate(_ candidate: LoopCandidate) {
+        plannedRoute = candidate.route
+        oneWayPlannedRoute = nil
+        tripShape = .loop
+        plannedRouteIsDistanceLoop = true
+        routeDestination = nil
+        routingError = nil
+    }
+
+    func cancelLoopSearch() {
+        loopSearchGeneration += 1
+        isSearchingLoops = false
+    }
+
+    private func currentLoopConstraints() -> LoopSearchConstraints {
+        LoopSearchConstraints(
+            origin: loopSearchOrigin,
+            targetDistanceMeters: loopTargetMiles * 1609.344,
+            tolerance: 0.10,
+            maxLTS: loopMaxLTS,
+            preferTrails: loopPreferTrails,
+            // Prefer-trails raises scoring weight; hard minTrailShare stays optional/strict.
+            minTrailShare: nil,
+            elevationPreference: nil
+        )
     }
 
     #if DEBUG

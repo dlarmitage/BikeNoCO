@@ -10,6 +10,12 @@ struct RoutingProfile: Sendable {
     var maxLTS: Int?
     var avoidNaturalSurface: Bool
     var maxSnapMeters: Double
+    /// When true, non-trail edges cost ×`preferTrailsNonTrailMultiplier` during A*.
+    /// Preferred trail: ArcGIS paved multiuse trail, OSM cycleway / path.
+    var preferTrails: Bool
+
+    /// Extra cost applied to non-trail edges when `preferTrails` is on.
+    static let preferTrailsNonTrailMultiplier: Double = 1.4
 
     static let `default` = RoutingProfile(
         facilityMultipliers: [
@@ -49,7 +55,8 @@ struct RoutingProfile: Sendable {
         avoidNaturalSurface: false,
         // Walking distance onto the network; generous enough for residential blocks
         // and Simulator long-presses that miss the polyline by a bit.
-        maxSnapMeters: 300
+        maxSnapMeters: 300,
+        preferTrails: false
     )
 
     /// Smallest facility/connector multiplier in the profile (for an admissible A* heuristic).
@@ -86,7 +93,20 @@ struct RoutingProfile: Sendable {
             ltsModifier = modifier
         }
 
-        return edge.lengthMeters * baseMultiplier * ltsModifier
+        var cost = edge.lengthMeters * baseMultiplier * ltsModifier
+        if preferTrails, !Self.isPreferredTrail(edge) {
+            cost *= Self.preferTrailsNonTrailMultiplier
+        }
+        return cost
+    }
+
+    /// Paved multiuse trail, or OSM cycleway / path connectors.
+    static func isPreferredTrail(_ edge: GraphEdge) -> Bool {
+        if edge.isConnector {
+            guard let osmClass = edge.osmClass else { return false }
+            return osmClass == .cycleway || osmClass == .path
+        }
+        return edge.facilityType == .pavedTrail
     }
 
     /// Low-stress mileage rule (spec §5 / task 03b):

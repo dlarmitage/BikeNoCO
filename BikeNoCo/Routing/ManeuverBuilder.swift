@@ -80,28 +80,60 @@ enum ManeuverBuilder {
         ) ?? 0
     }
 
-    static let roundTripTurnaroundInstruction = "Turn around and head back"
+    static let outAndBackTurnaroundInstruction = "Turn around and head back"
 
-    static func build(from route: PlannedRoute) -> [Maneuver] {
-        if route.isRoundTrip,
-           let outboundDistance = route.outboundDistanceMeters,
-           let outboundEdgeCount = route.outboundEdgeCount,
-           outboundEdgeCount > 0,
-           outboundEdgeCount < route.edges.count {
-            return buildRoundTrip(
-                route: route,
-                outboundDistance: outboundDistance,
-                outboundEdgeCount: outboundEdgeCount
-            )
+    static func passThroughInstruction(streetName: String?) -> String {
+        if let streetName, !streetName.isEmpty {
+            return "Passing your turnaround point at \(streetName)"
         }
-        return buildOneWay(from: route)
+        return "Passing your turnaround point"
     }
 
-    /// Outbound cues, a single turnaround, then return-leg cues with arrive at the origin.
-    private static func buildRoundTrip(
+    static func build(from route: PlannedRoute) -> [Maneuver] {
+        guard route.returnsToOrigin,
+              let outboundDistance = route.outboundDistanceMeters,
+              let outboundEdgeCount = route.outboundEdgeCount,
+              outboundEdgeCount > 0,
+              outboundEdgeCount < route.edges.count else {
+            return buildOneWay(from: route)
+        }
+
+        switch route.tripShape {
+        case .outAndBack:
+            return buildMultiLeg(
+                route: route,
+                outboundDistance: outboundDistance,
+                outboundEdgeCount: outboundEdgeCount,
+                viaManeuver: .outAndBackTurnaround
+            )
+        case .loop:
+            // Via-point loops (2 legs) get a pass-through cue. Distance loops (3+ legs)
+            // keep waypoints silent — the rider just hears normal turns and arrives home.
+            if route.legs.count == 2 {
+                return buildMultiLeg(
+                    route: route,
+                    outboundDistance: outboundDistance,
+                    outboundEdgeCount: outboundEdgeCount,
+                    viaManeuver: .loopPassThrough
+                )
+            }
+            return buildOneWay(from: route)
+        case .oneWay:
+            return buildOneWay(from: route)
+        }
+    }
+
+    private enum ViaManeuverKind {
+        case outAndBackTurnaround
+        case loopPassThrough
+    }
+
+    /// Outbound cues, a via-point cue, then return-leg cues with arrive at the origin.
+    private static func buildMultiLeg(
         route: PlannedRoute,
         outboundDistance: Double,
-        outboundEdgeCount: Int
+        outboundEdgeCount: Int,
+        viaManeuver: ViaManeuverKind
     ) -> [Maneuver] {
         let outboundEdges = Array(route.edges.prefix(outboundEdgeCount))
         let returnEdges = Array(route.edges.suffix(from: outboundEdgeCount))
@@ -110,8 +142,7 @@ enum ManeuverBuilder {
             ?? PolylineSlicer.coordinate(at: outboundDistance, along: route.coordinates)
             ?? route.coordinates[min(route.coordinates.count / 2, route.coordinates.count - 1)]
 
-        // Slice the real round-trip polyline so neither half includes the 180° cusp
-        // (which would otherwise become a generic "Make a U-turn" cue).
+        // Slice the real polyline so neither half includes a cusp artifact.
         let outboundCoords = PolylineSlicer.prefix(
             coordinates: route.coordinates,
             untilDistanceAlong: outboundDistance
@@ -134,8 +165,6 @@ enum ManeuverBuilder {
             destination: route.destination
         )
 
-        // Drop arrive on outbound and depart on return; also drop any u-turn that is
-        // really the turnaround cusp (we insert our own cue with the right wording).
         let turnaroundWindow = max(collapseMeters, 40.0)
         let outboundManeuvers = buildOneWay(from: outboundRoute).filter { maneuver in
             if maneuver.type == .arrive { return false }
@@ -147,15 +176,30 @@ enum ManeuverBuilder {
         }
         let returnManeuvers = buildOneWay(from: returnRoute).filter { $0.type != .depart }
 
-        let turnaround = Maneuver(
-            type: .uTurn,
-            coordinate: turnaroundCoordinate,
-            distanceAlongRoute: outboundDistance,
-            distanceToNext: max(0, route.totalDistanceMeters - outboundDistance),
-            streetName: nil,
-            instruction: roundTripTurnaroundInstruction,
-            turnAngleDegrees: 180
-        )
+        let viaLabel = route.legs.first?.waypointLabel
+        let via: Maneuver
+        switch viaManeuver {
+        case .outAndBackTurnaround:
+            via = Maneuver(
+                type: .uTurn,
+                coordinate: turnaroundCoordinate,
+                distanceAlongRoute: outboundDistance,
+                distanceToNext: max(0, route.totalDistanceMeters - outboundDistance),
+                streetName: viaLabel,
+                instruction: outAndBackTurnaroundInstruction,
+                turnAngleDegrees: 180
+            )
+        case .loopPassThrough:
+            via = Maneuver(
+                type: .continue,
+                coordinate: turnaroundCoordinate,
+                distanceAlongRoute: outboundDistance,
+                distanceToNext: max(0, route.totalDistanceMeters - outboundDistance),
+                streetName: viaLabel,
+                instruction: passThroughInstruction(streetName: viaLabel),
+                turnAngleDegrees: nil
+            )
+        }
 
         let shiftedReturn = returnManeuvers.map { maneuver in
             Maneuver(
@@ -170,7 +214,6 @@ enum ManeuverBuilder {
             )
         }
 
-        // Drop return cues that sit on top of the turnaround (including a generic u-turn).
         let filteredReturn = shiftedReturn.filter { maneuver in
             if maneuver.type == .arrive { return true }
             if abs(maneuver.distanceAlongRoute - outboundDistance) < turnaroundWindow {
@@ -179,8 +222,7 @@ enum ManeuverBuilder {
             return true
         }
 
-        var combined = outboundManeuvers + [turnaround] + filteredReturn
-        // Recompute distanceToNext between neighbors.
+        var combined = outboundManeuvers + [via] + filteredReturn
         for index in combined.indices {
             let nextDistance: Double
             if index + 1 < combined.count {

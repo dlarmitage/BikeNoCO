@@ -108,6 +108,74 @@ final class RouteProgressTrackerTests: XCTestCase {
         }
     }
 
+    func testLollipopLoopStemDoesNotJumpAhead() {
+        // 300 m stem out, 400 m square bulb, 300 m stem back on the same geometry.
+        var coords: [CLLocationCoordinate2D] = []
+        for x in stride(from: 0.0, through: 300.0, by: 10.0) {
+            coords.append(at(LocalPoint(x: x, y: 0)))
+        }
+        for y in stride(from: 10.0, through: 200.0, by: 10.0) {
+            coords.append(at(LocalPoint(x: 300, y: y)))
+        }
+        for x in stride(from: 290.0, through: 100.0, by: -10.0) {
+            coords.append(at(LocalPoint(x: x, y: 200)))
+        }
+        for y in stride(from: 190.0, through: 0.0, by: -10.0) {
+            coords.append(at(LocalPoint(x: 100, y: y)))
+        }
+        for x in stride(from: 110.0, through: 300.0, by: 10.0) {
+            coords.append(at(LocalPoint(x: x, y: 0)))
+        }
+        for x in stride(from: 290.0, through: 0.0, by: -10.0) {
+            coords.append(at(LocalPoint(x: x, y: 0)))
+        }
+
+        let total = PlannedRoute.polylineLength(coords)
+        let stem = 300.0
+        let maneuvers = [
+            Maneuver(
+                type: .depart,
+                coordinate: coords[0],
+                distanceAlongRoute: 0,
+                distanceToNext: stem,
+                streetName: "Stem",
+                instruction: "Head east"
+            ),
+            Maneuver(
+                type: .continue,
+                coordinate: at(LocalPoint(x: 300, y: 0)),
+                distanceAlongRoute: stem,
+                distanceToNext: max(0, total - 2 * stem),
+                streetName: "Via",
+                instruction: ManeuverBuilder.passThroughInstruction(streetName: "Via")
+            ),
+            Maneuver(
+                type: .arrive,
+                coordinate: coords.last!,
+                distanceAlongRoute: total,
+                distanceToNext: 0,
+                streetName: nil,
+                instruction: "Arrive at destination"
+            ),
+        ]
+
+        var tracker = RouteProgressTracker(coordinates: coords, maneuvers: maneuvers)
+        var lastAlong = -1.0
+
+        // Outbound along the stem — must not jump to the return stem.
+        for x in stride(from: 0.0, through: 250.0, by: 10.0) {
+            let fix = location(at: LocalPoint(x: x, y: Double.random(in: -4...4)), accuracy: 5, speed: 4)
+            let progress = tracker.update(location: fix)
+            XCTAssertLessThan(
+                progress.distanceAlongRoute,
+                stem + 40,
+                "Lollipop jumped ahead to \(progress.distanceAlongRoute) while still on outbound stem at x=\(x)"
+            )
+            XCTAssertGreaterThanOrEqual(progress.distanceAlongRoute, lastAlong - 15)
+            lastAlong = progress.distanceAlongRoute
+        }
+    }
+
     func testLowAccuracyFixDoesNotUpdateMatch() {
         let coords = [at(LocalPoint(x: 0, y: 0)), at(LocalPoint(x: 200, y: 0))]
         var tracker = RouteProgressTracker(coordinates: coords, maneuvers: [])

@@ -1,22 +1,227 @@
 import Foundation
 import CoreLocation
 
+/// Reusable snap index for many routes against the same graph (distance-loop search).
+/// Thread-safe for concurrent bearing searches.
+final class RoutingIndex: @unchecked Sendable {
+    let graph: BikeNetworkGraph
+    private let index: EdgeSpatialIndex
+    private let lock = NSLock()
+
+    init(graph: BikeNetworkGraph) {
+        self.graph = graph
+        self.index = EdgeSpatialIndex(graph: graph)
+    }
+
+    fileprivate func anchor(
+        _ coordinate: CLLocationCoordinate2D,
+        maxDistance: Double
+    ) -> RouteAnchor? {
+        lock.lock()
+        defer { lock.unlock() }
+        return index.anchor(coordinate, maxDistance: maxDistance)
+    }
+}
+
 enum RouteFinder {
+    /// Exact outbound-edge reuse multiplier for return-leg search.
+    static let outboundReuseMultiplier: Double = 5
+    /// Multiplier for edges whose midpoint is within `nearOutboundMeters` of outbound geometry.
+    static let nearOutboundMultiplier: Double = 2
+    /// Distance threshold for the near-outbound penalty / overlap accounting.
+    static let nearOutboundMeters: Double = 40
+    /// Midpoints this close to outbound geometry count as reuse (covers overlay splits).
+    fileprivate static let coincidentOutboundMeters: Double = 1.0
+
     static func route(
         from origin: CLLocationCoordinate2D,
         to destination: CLLocationCoordinate2D,
         graph: BikeNetworkGraph,
+        profile: RoutingProfile = .default,
+        edgeCostMultipliers: [Int: Double] = [:]
+    ) -> Result<PlannedRoute, RoutingError> {
+        route(
+            from: origin,
+            to: destination,
+            graph: graph,
+            profile: profile,
+            edgeCostMultipliers: edgeCostMultipliers,
+            reusePenalty: nil,
+            routingIndex: nil
+        )
+    }
+
+    /// Outbound origin→via, then return via→origin with reuse penalties. Joins into a loop trip.
+    static func loop(
+        from origin: CLLocationCoordinate2D,
+        via destination: CLLocationCoordinate2D,
+        graph: BikeNetworkGraph,
         profile: RoutingProfile = .default
+    ) -> Result<PlannedRoute, RoutingError> {
+        let outboundResult = route(
+            from: origin,
+            to: destination,
+            graph: graph,
+            profile: profile
+        )
+        switch outboundResult {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let outbound):
+            return loop(outbound: outbound, graph: graph, profile: profile)
+        }
+    }
+
+    /// Build a loop from an already-computed outbound one-way route.
+    static func loop(
+        outbound: PlannedRoute,
+        graph: BikeNetworkGraph,
+        profile: RoutingProfile = .default
+    ) -> Result<PlannedRoute, RoutingError> {
+        let reuse = ReusePenaltyContext(
+            outboundEdges: outbound.edges,
+            outboundCoordinates: outbound.coordinates,
+            graph: graph
+        )
+        let returnResult = route(
+            from: outbound.destination,
+            to: outbound.origin,
+            graph: graph,
+            profile: profile,
+            edgeCostMultipliers: reuse.edgeMultipliers,
+            reusePenalty: reuse,
+            routingIndex: nil
+        )
+        switch returnResult {
+        case .failure(let error):
+            return .failure(error)
+        case .success(let returnLeg):
+            let overlap = reuse.overlapShare(of: returnLeg.edges)
+            return .success(
+                PlannedRoute.loop(
+                    outbound: outbound,
+                    returnLeg: returnLeg,
+                    overlapShare: overlap
+                )
+            )
+        }
+    }
+
+    /// Route through an ordered waypoint list (first = start, last = end).
+    /// When `cumulativeReusePenalties` is true, each leg after the first applies 06a
+    /// reuse penalties against all earlier legs (used by the distance-loop planner).
+    static func routeThrough(
+        waypoints: [CLLocationCoordinate2D],
+        graph: BikeNetworkGraph,
+        profile: RoutingProfile = .default,
+        cumulativeReusePenalties: Bool = false,
+        tripShape: TripShape = .oneWay,
+        routingIndex: RoutingIndex? = nil
+    ) -> Result<PlannedRoute, RoutingError> {
+        guard waypoints.count >= 2 else {
+            return .failure(.noPath(hint: "Need at least two waypoints to route."))
+        }
+
+        let index = routingIndex ?? RoutingIndex(graph: graph)
+        var segments: [PlannedRoute] = []
+        var priorEdges: [GraphEdge] = []
+        var priorCoordinates: [CLLocationCoordinate2D] = []
+        var laterOverlapped = 0.0
+        var laterTotal = 0.0
+
+        for indexInPath in 0..<(waypoints.count - 1) {
+            let from = waypoints[indexInPath]
+            let to = waypoints[indexInPath + 1]
+            let reuse: ReusePenaltyContext?
+            let multipliers: [Int: Double]
+            if cumulativeReusePenalties, !priorEdges.isEmpty {
+                let context = ReusePenaltyContext(
+                    outboundEdges: priorEdges,
+                    outboundCoordinates: priorCoordinates,
+                    graph: graph
+                )
+                reuse = context
+                multipliers = context.edgeMultipliers
+            } else {
+                reuse = nil
+                multipliers = [:]
+            }
+
+            let result = route(
+                from: from,
+                to: to,
+                graph: graph,
+                profile: profile,
+                edgeCostMultipliers: multipliers,
+                reusePenalty: reuse,
+                routingIndex: index
+            )
+            switch result {
+            case .failure(let error):
+                return .failure(error)
+            case .success(let segment):
+                if let reuse {
+                    laterOverlapped += reuse.overlapShare(of: segment.edges) * segment.totalDistanceMeters
+                    laterTotal += segment.totalDistanceMeters
+                }
+                segments.append(segment)
+                priorEdges.append(contentsOf: segment.edges)
+                if priorCoordinates.isEmpty {
+                    priorCoordinates = segment.coordinates
+                } else if let first = segment.coordinates.first,
+                          let last = priorCoordinates.last,
+                          abs(first.latitude - last.latitude) < 1e-8,
+                          abs(first.longitude - last.longitude) < 1e-8 {
+                    priorCoordinates.append(contentsOf: segment.coordinates.dropFirst())
+                } else {
+                    priorCoordinates.append(contentsOf: segment.coordinates)
+                }
+            }
+        }
+
+        let overlapShare: Double? = cumulativeReusePenalties && laterTotal > 0
+            ? min(1, laterOverlapped / laterTotal)
+            : nil
+        let origin = waypoints[0]
+        let destination = waypoints[waypoints.count - 1]
+        return .success(
+            PlannedRoute.joining(
+                segments: segments,
+                origin: origin,
+                destination: destination,
+                tripShape: tripShape,
+                overlapShare: overlapShare
+            )
+        )
+    }
+
+    private static func route(
+        from origin: CLLocationCoordinate2D,
+        to destination: CLLocationCoordinate2D,
+        graph: BikeNetworkGraph,
+        profile: RoutingProfile,
+        edgeCostMultipliers: [Int: Double],
+        reusePenalty: ReusePenaltyContext?,
+        routingIndex: RoutingIndex?
     ) -> Result<PlannedRoute, RoutingError> {
         guard !graph.edgesByID.isEmpty else {
             return .failure(.originTooFar)
         }
 
-        let index = EdgeSpatialIndex(graph: graph)
-        guard let originAnchor = index.anchor(origin, maxDistance: profile.maxSnapMeters) else {
+        let originAnchor: RouteAnchor?
+        let destinationAnchor: RouteAnchor?
+        if let routingIndex {
+            originAnchor = routingIndex.anchor(origin, maxDistance: profile.maxSnapMeters)
+            destinationAnchor = routingIndex.anchor(destination, maxDistance: profile.maxSnapMeters)
+        } else {
+            let index = EdgeSpatialIndex(graph: graph)
+            originAnchor = index.anchor(origin, maxDistance: profile.maxSnapMeters)
+            destinationAnchor = index.anchor(destination, maxDistance: profile.maxSnapMeters)
+        }
+        guard let originAnchor else {
             return .failure(.originTooFar)
         }
-        guard let destinationAnchor = index.anchor(destination, maxDistance: profile.maxSnapMeters) else {
+        guard let destinationAnchor else {
             return .failure(.destinationTooFar)
         }
 
@@ -26,11 +231,22 @@ enum RouteFinder {
             destination: destinationAnchor
         )
 
+        let multiplier: (GraphEdge) -> Double = { edge in
+            if let mapped = edgeCostMultipliers[edge.id] {
+                return mapped
+            }
+            if let reusePenalty {
+                return reusePenalty.multiplier(forUnmappedEdge: edge)
+            }
+            return 1
+        }
+
         guard let path = astar(
             from: overlay.originNodeID,
             to: overlay.destinationNodeID,
             overlay: overlay,
-            profile: profile
+            profile: profile,
+            costMultiplier: multiplier
         ) else {
             let hint = disconnectedHint(
                 origin: originAnchor,
@@ -61,13 +277,15 @@ enum RouteFinder {
         from start: Int,
         to goal: Int,
         overlay: RoutingOverlay,
-        profile: RoutingProfile
+        profile: RoutingProfile,
+        costMultiplier: (GraphEdge) -> Double = { _ in 1 }
     ) -> PathResult? {
         if start == goal {
             let coordinate = overlay.coordinate(of: start)
             return PathResult(edges: [], coordinates: [coordinate])
         }
 
+        // Penalties only raise costs, so the unpenalized minimum multiplier stays admissible.
         let heuristicScale = profile.minimumMultiplier
         let goalPoint = overlay.localPoint(of: goal)
 
@@ -90,7 +308,8 @@ enum RouteFinder {
             let currentG = gScore[current] ?? .infinity
             for (edge, neighbor) in overlay.neighbors(of: current) {
                 if closed.contains(neighbor) { continue }
-                guard let stepCost = profile.cost(for: edge) else { continue }
+                guard let baseCost = profile.cost(for: edge) else { continue }
+                let stepCost = baseCost * costMultiplier(edge)
                 let tentative = currentG + stepCost
                 if tentative < (gScore[neighbor] ?? .infinity) {
                     gScore[neighbor] = tentative
@@ -156,6 +375,166 @@ enum RouteFinder {
             return "Start and destination look like they're on disconnected parts of the bike network. Street connectors are coming soon."
         }
         return nil
+    }
+}
+
+// MARK: - Return-leg reuse penalties
+
+/// Penalizes outbound edges (×5) and edges near outbound geometry (×2) during return search.
+private struct ReusePenaltyContext {
+    let outboundEdgeIDs: Set<Int>
+    let edgeMultipliers: [Int: Double]
+    private let projection: LocalProjection
+    private let outboundLocals: [LocalPoint]
+    private let grid: SpatialGrid<Int>
+
+    init(
+        outboundEdges: [GraphEdge],
+        outboundCoordinates: [CLLocationCoordinate2D],
+        graph: BikeNetworkGraph
+    ) {
+        let projection = graph.projection
+        self.projection = projection
+        self.outboundEdgeIDs = Set(outboundEdges.map(\.id))
+        // Downsample long polylines so the near-outbound grid stays cheap to build/query.
+        let outboundLocals = Self.downsample(
+            outboundCoordinates.map { projection.toLocal($0) },
+            everyMeters: 20
+        )
+        self.outboundLocals = outboundLocals
+
+        var grid = SpatialGrid<Int>(cellSize: 25)
+        if outboundLocals.count >= 2 {
+            for i in 0..<(outboundLocals.count - 1) {
+                grid.insertSegment(id: i, from: outboundLocals[i], to: outboundLocals[i + 1])
+            }
+        }
+        self.grid = grid
+
+        var multipliers: [Int: Double] = [:]
+        for edge in outboundEdges {
+            multipliers[edge.id] = RouteFinder.outboundReuseMultiplier
+        }
+        // Near-outbound ×2 is resolved on demand in `multiplier(forUnmappedEdge:)` via the
+        // outbound geometry grid — scanning every graph edge here is too slow for loop search.
+        self.edgeMultipliers = multipliers
+    }
+
+    private static func downsample(_ points: [LocalPoint], everyMeters: Double) -> [LocalPoint] {
+        guard points.count >= 2 else { return points }
+        var result: [LocalPoint] = [points[0]]
+        var sinceLast = 0.0
+        for i in 1..<points.count {
+            let step = points[i - 1].distance(to: points[i])
+            sinceLast += step
+            if sinceLast >= everyMeters || i == points.count - 1 {
+                result.append(points[i])
+                sinceLast = 0
+            }
+        }
+        return result
+    }
+
+    private static func geometricMidpoint(
+        of edge: GraphEdge,
+        projection: LocalProjection
+    ) -> LocalPoint? {
+        guard !edge.geometry.isEmpty else { return nil }
+        if edge.geometry.count == 1 {
+            return projection.toLocal(edge.geometry[0])
+        }
+        let locals = edge.geometry.map { projection.toLocal($0) }
+        var total = 0.0
+        for i in 1..<locals.count {
+            total += locals[i - 1].distance(to: locals[i])
+        }
+        if total < 1e-6 {
+            return locals[locals.count / 2]
+        }
+        let target = total / 2
+        var traveled = 0.0
+        for i in 1..<locals.count {
+            let segment = locals[i - 1].distance(to: locals[i])
+            if traveled + segment >= target - 1e-9 {
+                let t = segment > 0 ? (target - traveled) / segment : 0
+                return LocalPoint(
+                    x: locals[i - 1].x + t * (locals[i].x - locals[i - 1].x),
+                    y: locals[i - 1].y + t * (locals[i].y - locals[i - 1].y)
+                )
+            }
+            traveled += segment
+        }
+        return locals.last
+    }
+
+    private static func distance(
+        from point: LocalPoint,
+        toOutbound outboundLocals: [LocalPoint],
+        grid: SpatialGrid<Int>
+    ) -> Double {
+        guard outboundLocals.count >= 2 else {
+            if let only = outboundLocals.first {
+                return point.distance(to: only)
+            }
+            return .infinity
+        }
+        let candidates = grid.segments(near: point, radius: RouteFinder.nearOutboundMeters)
+        var best = Double.infinity
+        let pairs: [(LocalPoint, LocalPoint)]
+        if candidates.isEmpty {
+            pairs = (0..<(outboundLocals.count - 1)).map { (outboundLocals[$0], outboundLocals[$0 + 1]) }
+        } else {
+            pairs = candidates.map { ($0.a, $0.b) }
+        }
+        for (a, b) in pairs {
+            best = min(best, point.projected(ontoSegmentFrom: a, to: b).distance)
+        }
+        return best
+    }
+
+    /// For overlay / unmapped edges: coincident with outbound → ×5, within 40 m → ×2.
+    func multiplier(forUnmappedEdge edge: GraphEdge) -> Double {
+        let distance = distanceToOutbound(midpoint(of: edge))
+        if distance <= RouteFinder.coincidentOutboundMeters {
+            return RouteFinder.outboundReuseMultiplier
+        }
+        if distance <= RouteFinder.nearOutboundMeters {
+            return RouteFinder.nearOutboundMultiplier
+        }
+        return 1
+    }
+
+    /// Also apply near-outbound ×2 for all graph edges when building a full map is useful in tests.
+    func multiplier(for edge: GraphEdge) -> Double {
+        if let mapped = edgeMultipliers[edge.id] {
+            return mapped
+        }
+        return multiplier(forUnmappedEdge: edge)
+    }
+
+    /// Fraction of return-leg length on outbound edges or within 40 m of outbound geometry.
+    func overlapShare(of returnEdges: [GraphEdge]) -> Double {
+        let total = returnEdges.reduce(0.0) { $0 + $1.lengthMeters }
+        guard total > 0 else { return 0 }
+        var overlapped = 0.0
+        for edge in returnEdges {
+            if outboundEdgeIDs.contains(edge.id) {
+                overlapped += edge.lengthMeters
+                continue
+            }
+            if distanceToOutbound(midpoint(of: edge)) <= RouteFinder.nearOutboundMeters {
+                overlapped += edge.lengthMeters
+            }
+        }
+        return min(1, overlapped / total)
+    }
+
+    private func midpoint(of edge: GraphEdge) -> LocalPoint {
+        Self.geometricMidpoint(of: edge, projection: projection) ?? LocalPoint(x: 0, y: 0)
+    }
+
+    private func distanceToOutbound(_ point: LocalPoint) -> Double {
+        Self.distance(from: point, toOutbound: outboundLocals, grid: grid)
     }
 }
 
