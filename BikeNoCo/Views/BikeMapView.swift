@@ -11,6 +11,7 @@ struct BikeMapView: UIViewRepresentable {
     let mapType: MKMapType
     @Binding var trackingMode: MKUserTrackingMode
     @Binding var focusRouteID: UUID?
+    @Binding var focusCoordinate: CLLocationCoordinate2D?
     var onLongPressDestination: ((CLLocationCoordinate2D) -> Void)?
 
     private static let fortCollinsRegion = MKCoordinateRegion(
@@ -139,6 +140,16 @@ struct BikeMapView: UIViewRepresentable {
                 mapView.setRegion(region, animated: true)
             }
             DispatchQueue.main.async { self.focusRouteID = nil }
+        }
+
+        // ── Center on a maneuver / arbitrary coordinate ──
+        if let coordinate = focusCoordinate {
+            let region = MKCoordinateRegion(
+                center: coordinate,
+                span: MKCoordinateSpan(latitudeDelta: 0.008, longitudeDelta: 0.008)
+            )
+            mapView.setRegion(region, animated: true)
+            DispatchQueue.main.async { self.focusCoordinate = nil }
         }
     }
 

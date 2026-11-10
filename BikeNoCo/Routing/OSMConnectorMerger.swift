@@ -769,7 +769,9 @@ private struct MutableGraph {
     }
 }
 
-private let osmConnectorSourceID = UUID(uuidString: "A1111111-B222-C333-D444-E55555555555")!
+private let osmConnectorSourceID = UUID(
+    uuid: (0xA1, 0x11, 0x11, 0x11, 0xB2, 0x22, 0xC3, 0x33, 0xD4, 0x44, 0xE5, 0x55, 0x55, 0x55, 0x55, 0x55)
+)
 
 // MARK: - Shared segment grid (concurrent conflation / attachment)
 
@@ -817,10 +819,11 @@ private struct OSMNodeIndex {
             degree[edge.endNodeID, default: 0] += 1
             let gradeSeparated = edge.isBridge || edge.isTunnel
             for nid in [edge.startNodeID, edge.endNodeID] {
-                if bridgeTunnelOnly[nid] == nil {
-                    bridgeTunnelOnly[nid] = gradeSeparated
+                if let existing = bridgeTunnelOnly[nid] {
+                    // Node is grade-separated only if every incident edge is bridge/tunnel.
+                    bridgeTunnelOnly[nid] = existing && gradeSeparated
                 } else {
-                    bridgeTunnelOnly[nid] = bridgeTunnelOnly[nid]! && gradeSeparated
+                    bridgeTunnelOnly[nid] = gradeSeparated
                 }
             }
             if let first = edge.coordinates.first {

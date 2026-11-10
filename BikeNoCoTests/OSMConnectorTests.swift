@@ -163,6 +163,54 @@ final class OSMConnectorTests: XCTestCase {
         XCTAssertGreaterThan(planned.connectorShare, 0)
     }
 
+    /// Regression for the former `bridgeTunnelOnly[nid]!` force unwrap in `OSMNodeIndex`.
+    /// A shared node seen first on a bridge edge and again on an at-grade edge must not trap,
+    /// and must become attachable (onlyGradeSeparated cleared).
+    func testSharedNodeBridgeThenAtGradeDoesNotTrapAndAllowsAttachment() {
+        let arcgis = route(points: [LocalPoint(x: 0, y: 0), LocalPoint(x: 100, y: 0)], facility: .bikeLane)
+        let graph = BikeNetworkGraphBuilder.build(from: [arcgis], config: config)
+
+        // Shared OSM node 500 at (0, 10): first incident edge is a bridge spur, second is
+        // an at-grade spur. Both are vertical so conflation won't drop them. Order matters —
+        // this is the path that used to force-unwrap the dictionary value.
+        let bridge = connector(
+            from: LocalPoint(x: 0, y: 10),
+            to: LocalPoint(x: 0, y: 120),
+            highway: .secondary,
+            osmStart: 500,
+            osmEnd: 501,
+            isBridge: true
+        )
+        let atGrade = connector(
+            from: LocalPoint(x: 0, y: 10),
+            to: LocalPoint(x: 0, y: -80),
+            highway: .residential,
+            osmStart: 500,
+            osmEnd: 502
+        )
+
+        let merged = OSMConnectorMerger.merge(arcgis: graph, connectors: [bridge, atGrade])
+        XCTAssertEqual(merged.osmEdgesLoaded, 2)
+        XCTAssertEqual(merged.osmEdgesKept, 2)
+        // Node 500 is within 15 m of ArcGIS and is no longer bridge-only → attachment.
+        XCTAssertGreaterThan(
+            merged.attachmentEdgeCount,
+            0,
+            "Shared bridge+at-grade node should be attachable after grade-separated flag clears"
+        )
+    }
+
+    /// Full bundled OSM through `OSMNodeIndex` (via merge). Catches traps on real multi-edge nodes.
+    func testBundledOSMNodeIndexBuildDoesNotTrap() throws {
+        let file = try OSMConnectorLoader.loadBundled()
+        XCTAssertGreaterThan(file.edges.count, 1000)
+        let arcgis = route(points: [LocalPoint(x: 0, y: 0), LocalPoint(x: 100, y: 0)], facility: .bikeLane)
+        let graph = BikeNetworkGraphBuilder.build(from: [arcgis], config: config)
+        let merged = OSMConnectorMerger.merge(arcgis: graph, connectors: file.edges)
+        XCTAssertEqual(merged.osmEdgesLoaded, file.edges.count)
+        XCTAssertGreaterThan(merged.osmEdgesKept, 0)
+    }
+
     func testDeltaDecodingRoundTripsWithinOnePointFiveMeters() {
         let original = [
             CLLocationCoordinate2D(latitude: 40.5853, longitude: -105.0844),

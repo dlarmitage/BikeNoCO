@@ -10,6 +10,9 @@ struct ContentView: View {
     @State private var selectedRoute: BikeRoute?
     @State private var locationBannerDismissed = false
     @State private var completedSession: RideSession?
+    @State private var showTurnsSheet = false
+    @State private var focusCoordinate: CLLocationCoordinate2D?
+    @State private var gpxShareURL: URL?
 
     private var isRecording: Bool { recorder.state == .recording }
 
@@ -25,6 +28,7 @@ struct ContentView: View {
                 mapType: viewModel.mapStyle.mapType,
                 trackingMode: $viewModel.trackingMode,
                 focusRouteID: $viewModel.focusRouteID,
+                focusCoordinate: $focusCoordinate,
                 onLongPressDestination: { coordinate in
                     viewModel.planRoute(to: coordinate)
                 }
@@ -136,10 +140,7 @@ struct ContentView: View {
             if let planned = viewModel.plannedRoute {
                 VStack {
                     Spacer()
-                    PlannedRouteCard(
-                        route: planned,
-                        onClear: { viewModel.clearPlannedRoute() }
-                    )
+                    plannedRouteCard(for: planned)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
                 }
@@ -150,6 +151,14 @@ struct ContentView: View {
         .sheet(isPresented: $showFilters) {
             FilterView(viewModel: viewModel)
         }
+        .sheet(isPresented: $showTurnsSheet) {
+            if let planned = viewModel.plannedRoute {
+                ManeuverListSheet(route: planned) { coordinate in
+                    showTurnsSheet = false
+                    focusCoordinate = coordinate
+                }
+            }
+        }
         .sheet(item: $selectedRoute) { route in
             RouteDetailView(route: route)
         }
@@ -158,6 +167,12 @@ struct ContentView: View {
                 completedSession = nil
                 recorder.discardAndReset()
             }
+        }
+        .sheet(item: Binding(
+            get: { gpxShareURL.map(IdentifiableURL.init) },
+            set: { gpxShareURL = $0?.url }
+        )) { item in
+            ShareSheet(items: [item.url])
         }
         .onChange(of: recorder.state) { _, newState in
             if case .finished(let session) = newState {
@@ -168,6 +183,49 @@ struct ContentView: View {
             await viewModel.loadRoutes()
         }
     }
+
+    @ViewBuilder
+    private func plannedRouteCard(for planned: PlannedRoute) -> some View {
+        #if DEBUG
+        PlannedRouteCard(
+            route: planned,
+            onClear: { viewModel.clearPlannedRoute() },
+            onShowTurns: { showTurnsSheet = true },
+            onExportGPX: { exportGPX(for: planned) }
+        )
+        #else
+        PlannedRouteCard(
+            route: planned,
+            onClear: { viewModel.clearPlannedRoute() },
+            onShowTurns: { showTurnsSheet = true }
+        )
+        #endif
+    }
+
+    #if DEBUG
+    private func exportGPX(for route: PlannedRoute) {
+        do {
+            gpxShareURL = try GPXExporter.writeTemporaryFile(for: route)
+        } catch {
+            NSLog("[BikeNoCo] GPX export failed: %@", error.localizedDescription)
+        }
+    }
+    #endif
+}
+
+private struct IdentifiableURL: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
+}
+
+private struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: items, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Planned route card
@@ -175,6 +233,8 @@ struct ContentView: View {
 private struct PlannedRouteCard: View {
     let route: PlannedRoute
     let onClear: () -> Void
+    let onShowTurns: () -> Void
+    var onExportGPX: (() -> Void)?
 
     private var distanceMiles: String {
         String(format: "%.1f mi", route.totalDistanceMeters / 1609.344)
@@ -220,13 +280,32 @@ private struct PlannedRouteCard: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(2)
 
-            Button(action: {}) {
-                Label("Start", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
-                    .frame(maxWidth: .infinity)
+            HStack(spacing: 10) {
+                Button(action: onShowTurns) {
+                    Label("Turns", systemImage: "list.bullet")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+
+                Button(action: {}) {
+                    Label("Start", systemImage: "arrow.triangle.turn.up.right.diamond.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(true)
+                .opacity(0.55)
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(true)
-            .opacity(0.55)
+
+            #if DEBUG
+            if let onExportGPX {
+                Button(action: onExportGPX) {
+                    Label("Export GPX", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .font(.footnote)
+            }
+            #endif
 
             Text("Navigation coming soon")
                 .font(.caption2)
@@ -236,6 +315,48 @@ private struct PlannedRouteCard: View {
         .padding(16)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
         .shadow(color: .black.opacity(0.12), radius: 8, y: 3)
+    }
+}
+
+private struct ManeuverListSheet: View {
+    let route: PlannedRoute
+    let onSelect: (CLLocationCoordinate2D) -> Void
+
+    private var maneuvers: [Maneuver] {
+        ManeuverBuilder.build(from: route)
+    }
+
+    var body: some View {
+        NavigationStack {
+            List(maneuvers) { maneuver in
+                Button {
+                    onSelect(maneuver.coordinate)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: maneuver.type.systemImage)
+                            .font(.title3)
+                            .frame(width: 28)
+                            .foregroundStyle(.tint)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(maneuver.instruction)
+                                .font(.body)
+                                .foregroundStyle(.primary)
+                                .multilineTextAlignment(.leading)
+                            if maneuver.type != .arrive {
+                                Text(DistanceFormat.imperial(maneuver.distanceToNext))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.vertical, 4)
+                }
+            }
+            .navigationTitle("Turns")
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium, .large])
     }
 }
 

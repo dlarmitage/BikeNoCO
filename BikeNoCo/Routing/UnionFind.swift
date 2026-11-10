@@ -18,6 +18,7 @@ struct UnionFind {
     }
 
     mutating func find(_ x: Int) -> Int {
+        guard parent.indices.contains(x) else { return x }
         if parent[x] != x {
             parent[x] = find(parent[x])
         }
@@ -28,6 +29,7 @@ struct UnionFind {
         let ra = find(a)
         let rb = find(b)
         if ra == rb { return }
+        guard parent.indices.contains(ra), parent.indices.contains(rb) else { return }
         if rank[ra] < rank[rb] {
             parent[ra] = rb
         } else if rank[ra] > rank[rb] {
