@@ -309,7 +309,9 @@ enum DistanceLoopPlanner {
     // MARK: - Naming / geometry
 
     static func name(for route: PlannedRoute, bearingDegrees: Double) -> String {
-        let names = route.dominantNames.filter { !$0.isEmpty }
+        let names = route.dominantNames
+            .map { NameNormalizer.routeLabel($0) }
+            .filter { !$0.isEmpty }
         if names.count >= 2 {
             return "\(names[0]) and \(names[1]) Loop"
         }

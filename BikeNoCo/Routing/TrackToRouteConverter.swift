@@ -98,18 +98,78 @@ enum TrackToRouteConverter {
         )
     }
 
-    /// Suggested display name from a converted route's dominant named runs.
+    /// Closed enough to treat as a loop when naming (start ≈ end).
+    static let loopClosureMeters: Double = 200
+
+    /// Suggested display name from named runs along the converted route.
+    /// Loops (start/end within 200 m): `"Spring Creek and Poudre Trail Loop"`.
+    /// Open rides: `"Laurel St to Mason Trail"`.
     static func suggestedName(for planned: PlannedRoute) -> String {
-        let bearing: Double
-        if planned.coordinates.count >= 2 {
-            let start = planned.coordinates[0]
-            let midIndex = planned.coordinates.count / 2
-            let mid = planned.coordinates[midIndex]
-            bearing = initialBearing(from: start, to: mid)
-        } else {
-            bearing = 0
+        let bearing = routeBearing(for: planned)
+        if isClosedLoop(planned, withinMeters: loopClosureMeters) {
+            return loopName(for: planned, bearingDegrees: bearing)
         }
-        return DistanceLoopPlanner.name(for: planned, bearingDegrees: bearing)
+        return openName(for: planned, bearingDegrees: bearing)
+    }
+
+    static func isClosedLoop(_ planned: PlannedRoute, withinMeters: Double = loopClosureMeters) -> Bool {
+        guard let start = planned.coordinates.first, let end = planned.coordinates.last else {
+            return false
+        }
+        let a = CLLocation(latitude: start.latitude, longitude: start.longitude)
+        let b = CLLocation(latitude: end.latitude, longitude: end.longitude)
+        return a.distance(from: b) <= withinMeters
+    }
+
+    /// Named runs in route order (consecutive same-normalized names collapsed).
+    static func orderedNamedRuns(in planned: PlannedRoute) -> [String] {
+        var runs: [String] = []
+        var lastKey: String?
+        for edge in planned.edges {
+            let trimmed = edge.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = NameNormalizer.normalize(trimmed)
+            guard !key.isEmpty else { continue }
+            if key != lastKey {
+                let label = NameNormalizer.routeLabel(trimmed)
+                if !label.isEmpty {
+                    runs.append(label)
+                }
+                lastKey = key
+            }
+        }
+        return runs
+    }
+
+    private static func loopName(for planned: PlannedRoute, bearingDegrees: Double) -> String {
+        let names = planned.dominantNames
+            .map { NameNormalizer.routeLabel($0) }
+            .filter { !$0.isEmpty }
+        if names.count >= 2 {
+            return "\(names[0]) and \(names[1]) Loop"
+        }
+        if let only = names.first {
+            return "\(only) Loop"
+        }
+        return "\(DistanceLoopPlanner.cardinalName(degrees: bearingDegrees)) Loop"
+    }
+
+    private static func openName(for planned: PlannedRoute, bearingDegrees: Double) -> String {
+        let runs = orderedNamedRuns(in: planned)
+        if runs.count >= 2, let first = runs.first, let last = runs.last, first != last {
+            return "\(first) to \(last)"
+        }
+        if let only = runs.first {
+            return only
+        }
+        return DistanceLoopPlanner.cardinalName(degrees: bearingDegrees)
+    }
+
+    private static func routeBearing(for planned: PlannedRoute) -> Double {
+        guard planned.coordinates.count >= 2 else { return 0 }
+        let start = planned.coordinates[0]
+        let mid = planned.coordinates[planned.coordinates.count / 2]
+        return initialBearing(from: start, to: mid)
     }
 
     // MARK: - Sampling

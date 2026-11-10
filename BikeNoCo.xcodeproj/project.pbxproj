@@ -74,6 +74,7 @@
 		BD8FA9D3F4E3B418D2CB2424 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 02155B5A37FB5708B98DEAAE /* PrivacyInfo.xcprivacy */; };
 		C39786D6B25971FC4633092D /* CoreMotion.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3CA3F3550DB62C40BA1371C0 /* CoreMotion.framework */; };
 		C8E7C0BF312D0476B9C6458C /* RideWithGPSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = C3CD5156F33A5C84AD468C9A /* RideWithGPSService.swift */; };
+		CC917D8F30028FBA2672C42B /* RouteNamingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70F3230CDC9D6F844FC4B846 /* RouteNamingTests.swift */; };
 		D2C777052F6702BDB410B67B /* OSMConnectorMerger.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11EF9259E9BC830F1E71CD4B /* OSMConnectorMerger.swift */; };
 		D3EE568EDD32CAAA971DF83C /* DistanceLoopPlanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 57FBF5EF1719B147AD6310C7 /* DistanceLoopPlanner.swift */; };
 		D98713A1612128E288CB4034 /* RideSimulator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 03A1CB757580DFB0D47FFBAD /* RideSimulator.swift */; };
@@ -142,6 +143,7 @@
 		6851E02F027CED6E174358E9 /* DistanceLoopPlannerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceLoopPlannerTests.swift; sourceTree = "<group>"; };
 		6D01487135EBCBFDAF82A08B /* DistanceLoopDiagnoseTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DistanceLoopDiagnoseTests.swift; sourceTree = "<group>"; };
 		70C6A1666704E178D26DE6DA /* ConnectivityReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityReport.swift; sourceTree = "<group>"; };
+		70F3230CDC9D6F844FC4B846 /* RouteNamingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RouteNamingTests.swift; sourceTree = "<group>"; };
 		714A42B522E6FD1502B4C677 /* RideSummaryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideSummaryView.swift; sourceTree = "<group>"; };
 		7687505C04BB759D05064DDF /* LocationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationProvider.swift; sourceTree = "<group>"; };
 		7A3B7B7A1CB8EBD2FF3F3E46 /* RideLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RideLogTests.swift; sourceTree = "<group>"; };
@@ -356,6 +358,7 @@
 				DCDC388E18CFA83015DB5FCD /* RideRecorderTests.swift */,
 				D971E627483885F624B3D4CF /* RoundTripTests.swift */,
 				5D8DACF53154C71D704A7E7E /* RouteFinderTests.swift */,
+				70F3230CDC9D6F844FC4B846 /* RouteNamingTests.swift */,
 				0DA1250A1CB95C54544C1C71 /* RouteProgressTrackerTests.swift */,
 				4910A8ADE8DD9D4694572CC0 /* UnionFindTests.swift */,
 			);
@@ -518,6 +521,7 @@
 				F2D3200DD0AC7B00635AB44B /* RideRecorderTests.swift in Sources */,
 				E127E78FDE2734A7602F663C /* RoundTripTests.swift in Sources */,
 				5A51A18C41633BB5A5BDE5F6 /* RouteFinderTests.swift in Sources */,
+				CC917D8F30028FBA2672C42B /* RouteNamingTests.swift in Sources */,
 				3DFB32573AFBD093D33A4B2B /* RouteProgressTrackerTests.swift in Sources */,
 				96B2C23DB0C3A80E67B85CF1 /* UnionFindTests.swift in Sources */,
 			);
