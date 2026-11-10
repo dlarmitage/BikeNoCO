@@ -393,6 +393,55 @@ final class MapViewModel: ObservableObject {
         }
     }
 
+    /// Loads a saved route's waypoints onto the map via `RouteFinder.routeThrough`.
+    func loadSavedRoute(waypoints: [CLLocationCoordinate2D], name: String? = nil) {
+        routingError = nil
+        plannedRoute = nil
+        oneWayPlannedRoute = nil
+        plannedRouteIsDistanceLoop = false
+        tripShape = .oneWay
+
+        guard waypoints.count >= 2 else {
+            routingError = .noPath(hint: "That saved route has no waypoints.")
+            return
+        }
+        guard let graph = networkGraph else {
+            routingError = .noPath(hint: "Bike network is still loading. Try again in a moment.")
+            return
+        }
+
+        routeDestination = waypoints.last
+        isRouting = true
+        routeGeneration += 1
+        let generation = routeGeneration
+        let profile = RoutingProfile.default
+
+        Task.detached(priority: .userInitiated) {
+            let result = RouteFinder.routeThrough(
+                waypoints: waypoints,
+                graph: graph,
+                profile: profile
+            )
+            await MainActor.run {
+                guard generation == self.routeGeneration else { return }
+                self.isRouting = false
+                switch result {
+                case .success(let planned):
+                    self.oneWayPlannedRoute = planned
+                    self.plannedRoute = planned
+                    self.routingError = nil
+                    if let name, !name.isEmpty {
+                        NSLog("[BikeNoCo] Loaded saved route \"%@\" (%.1f mi)", name, planned.totalDistanceMeters / 1609.344)
+                    }
+                case .failure(let error):
+                    self.oneWayPlannedRoute = nil
+                    self.plannedRoute = nil
+                    self.routingError = error
+                }
+            }
+        }
+    }
+
     func clearPlannedRoute() {
         routeGeneration += 1
         plannedRoute = nil

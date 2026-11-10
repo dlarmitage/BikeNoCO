@@ -29,6 +29,8 @@
 	<string>Used to continue recording your ride when the app is in the background.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Used to show your position on the map and to record your rides.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Used to measure elevation gain more accurately with the barometer while recording rides.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

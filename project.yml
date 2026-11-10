@@ -11,6 +11,11 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: BikeNoCo
+    dependencies:
+      - sdk: CoreMotion.framework
+      - sdk: Charts.framework
+      - sdk: SwiftData.framework
+      - sdk: libcompression.tbd
     resources:
       - path: BikeNoCo/Resources/osm_connectors.json
     # GPX for scheme location simulation (not copied into the app bundle).
@@ -30,6 +35,7 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         NSLocationWhenInUseUsageDescription: "Used to show your position on the map and to record your rides."
         NSLocationAlwaysAndWhenInUseUsageDescription: "Used to continue recording your ride when the app is in the background."
+        NSMotionUsageDescription: "Used to measure elevation gain more accurately with the barometer while recording rides."
         UIBackgroundModes:
           - location
           - audio

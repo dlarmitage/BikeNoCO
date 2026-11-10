@@ -1,4 +1,5 @@
 import CoreLocation
+import CoreMotion
 import Combine
 
 enum RecordingState: Equatable {
@@ -49,6 +50,7 @@ final class RideRecorder: ObservableObject {
     private let locationProvider: LocationProvider
     private let timing: RideRecorderTiming
     private let now: () -> Date
+    private let altimeter: CMAltimeter?
     private var locationCancellable: AnyCancellable?
     private var trackPoints: [TrackPoint] = []
     private var startDate: Date?
@@ -59,21 +61,27 @@ final class RideRecorder: ObservableObject {
     private var lastKnownSpeedMPS: Double = 0
     private var lastLocationUpdate: Date?
     private var timer: Timer?
+    /// Relative altitude samples from `CMAltimeter` (meters), used for elevation when available.
+    private var relativeAltitudeSamples: [(date: Date, meters: Double)] = []
+    private var isAltimeterRunning = false
 
     init(
         locationProvider: LocationProvider,
         timing: RideRecorderTiming = .default,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        altimeter: CMAltimeter? = CMAltimeter.isRelativeAltitudeAvailable() ? CMAltimeter() : nil
     ) {
         self.locationProvider = locationProvider
         self.timing = timing
         self.now = now
+        self.altimeter = altimeter
     }
 
     func startRecording() {
         guard state != .recording else { return }
         locationProvider.requestAuthorizationIfNeeded()
         trackPoints = []
+        relativeAltitudeSamples = []
         liveDistanceMeters = 0
         liveSpeedMPS = 0
         elapsedTime = 0
@@ -82,6 +90,7 @@ final class RideRecorder: ObservableObject {
         startDate = start
         activeSegmentStart = start
         subscribeToLocations()
+        startAltimeterIfAvailable()
         locationProvider.startUpdating(for: self, allowsBackground: true)
         state = .recording
 
@@ -105,6 +114,7 @@ final class RideRecorder: ObservableObject {
 
     func stopRecording() {
         unsubscribeFromLocations()
+        stopAltimeter()
         locationProvider.stopUpdating(for: self)
         timer?.invalidate()
         timer = nil
@@ -113,7 +123,12 @@ final class RideRecorder: ObservableObject {
         let start = startDate ?? end
         let movingDuration = activeElapsedTime(at: end)
         let session = RideSession.calculate(
-            points: trackPoints, start: start, end: end, movingDuration: movingDuration
+            points: trackPoints,
+            start: start,
+            end: end,
+            movingDuration: movingDuration,
+            weightKilograms: RiderSettings.weightKilograms,
+            elevationOverride: barometricElevation()
         )
         resetPauseTracking()
         state = .finished(session)
@@ -121,15 +136,52 @@ final class RideRecorder: ObservableObject {
 
     func discardAndReset() {
         unsubscribeFromLocations()
+        stopAltimeter()
         locationProvider.stopUpdating(for: self)
         timer?.invalidate()
         timer = nil
         trackPoints = []
+        relativeAltitudeSamples = []
         liveDistanceMeters = 0
         liveSpeedMPS = 0
         elapsedTime = 0
         resetPauseTracking()
         state = .idle
+    }
+
+    private func startAltimeterIfAvailable() {
+        guard let altimeter, !isAltimeterRunning else { return }
+        isAltimeterRunning = true
+        altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, error in
+            guard let self else { return }
+            if error != nil { return }
+            guard let data else { return }
+            Task { @MainActor [weak self] in
+                guard let self, case .recording = self.state else { return }
+                self.relativeAltitudeSamples.append(
+                    (self.now(), data.relativeAltitude.doubleValue)
+                )
+            }
+        }
+    }
+
+    private func stopAltimeter() {
+        guard isAltimeterRunning else { return }
+        altimeter?.stopRelativeAltitudeUpdates()
+        isAltimeterRunning = false
+    }
+
+    /// Elevation from barometer using a 0.5 m threshold (GPS uses 2 m).
+    private func barometricElevation() -> (gain: Double, loss: Double)? {
+        guard relativeAltitudeSamples.count > 1 else { return nil }
+        var gain = 0.0
+        var loss = 0.0
+        for i in 1..<relativeAltitudeSamples.count {
+            let diff = relativeAltitudeSamples[i].meters - relativeAltitudeSamples[i - 1].meters
+            if diff > 0.5 { gain += diff }
+            else if diff < -0.5 { loss += abs(diff) }
+        }
+        return (gain, loss)
     }
 
     private func subscribeToLocations() {

@@ -1,7 +1,9 @@
 import SwiftUI
 import MapKit
+import SwiftData
 
 struct ContentView: View {
+    @Environment(\.modelContext) private var modelContext
     @StateObject private var viewModel = MapViewModel()
     @StateObject private var locationMonitor = LocationPermissionMonitor()
     @StateObject private var locationProvider: LocationProvider
@@ -10,12 +12,23 @@ struct ContentView: View {
     @State private var showFilters = false
     @State private var showStylePicker = false
     @State private var showPlanLoop = false
+    @State private var showRides = false
     @State private var selectedRoute: BikeRoute?
     @State private var locationBannerDismissed = false
     @State private var completedSession: RideSession?
+    @State private var completedRideWasAutoSaved = false
+    @State private var completedRideIsSaved = false
+    @State private var completedRouteName: String?
+    @State private var completedRideOrdinal: Int?
+    @State private var completedIsPersonalBest = false
+    @State private var completedIsOnMyRoutes = false
+    @State private var completedSuggestedName = "My Route"
+    @State private var activeSavedRouteID: UUID?
+    @State private var rideWasNavigated = false
     @State private var showTurnsSheet = false
     @State private var focusCoordinate: CLLocationCoordinate2D?
     @State private var gpxShareURL: URL?
+    @State private var lastMatchQuality: Double?
 
     init() {
         let provider = LocationProvider()
@@ -23,6 +36,8 @@ struct ContentView: View {
         _recorder = StateObject(wrappedValue: RideRecorder(locationProvider: provider))
         _navigation = StateObject(wrappedValue: NavigationController(locationProvider: provider))
     }
+
+    private var rideStore: RideStore { RideStore(modelContext: modelContext) }
 
     private var isRecording: Bool { recorder.state == .recording }
     private var isNavigating: Bool { navigation.isNavigating }
@@ -132,6 +147,13 @@ struct ContentView: View {
                         showPlanLoop = true
                     }
 
+                    MapControlButton(
+                        systemImage: "list.bullet.rectangle.portrait",
+                        isActive: showRides
+                    ) {
+                        showRides = true
+                    }
+
                     MapControlButton(systemImage: "plus.magnifyingglass") {
                         viewModel.trackingMode = .none
                         viewModel.cameraCommand = .zoomIn
@@ -216,6 +238,24 @@ struct ContentView: View {
                 }
             )
         }
+        .sheet(isPresented: $showRides) {
+            RidesSheet(
+                graph: viewModel.routingGraph,
+                onRideThisRoute: { saved in
+                    // Sheet already dismissed itself before this callback.
+                    activeSavedRouteID = saved.id
+                    viewModel.loadSavedRoute(waypoints: saved.waypoints, name: saved.name)
+                },
+                onExportGPX: { session in
+                    #if DEBUG
+                    exportRideGPX(session)
+                    #endif
+                },
+                onMatchQuality: { quality in
+                    lastMatchQuality = quality
+                }
+            )
+        }
         .sheet(isPresented: $showTurnsSheet) {
             if let planned = viewModel.plannedRoute {
                 ManeuverListSheet(route: planned) { coordinate in
@@ -227,11 +267,34 @@ struct ContentView: View {
         .sheet(item: $selectedRoute) { route in
             RouteDetailView(route: route)
         }
-        .sheet(item: $completedSession, onDismiss: { recorder.discardAndReset() }) { session in
-            RideSummaryView(session: session) {
-                completedSession = nil
-                recorder.discardAndReset()
-            }
+        .sheet(item: $completedSession, onDismiss: {
+            recorder.discardAndReset()
+            resetCompletedRideMetadata()
+        }) { session in
+            RideSummaryView(
+                session: session,
+                isSaved: completedRideIsSaved,
+                needsManualSave: !completedRideIsSaved && !RideStore.shouldAutoSave(session: session),
+                routeName: completedRouteName,
+                rideOrdinal: completedRideOrdinal,
+                isPersonalBest: completedIsPersonalBest,
+                suggestedRouteName: completedSuggestedName,
+                riderWeightPounds: RiderSettings.weightPounds,
+                isAlreadyOnMyRoutes: completedIsOnMyRoutes,
+                onDone: {
+                    completedSession = nil
+                    recorder.discardAndReset()
+                },
+                onSave: {
+                    forceSaveCompletedRide(session)
+                },
+                onDelete: {
+                    deleteCompletedRide(session)
+                },
+                onAddToMyRoutes: { name in
+                    addCompletedRideToMyRoutes(session, name: name)
+                }
+            )
         }
         .sheet(item: Binding(
             get: { gpxShareURL.map(IdentifiableURL.init) },
@@ -241,7 +304,7 @@ struct ContentView: View {
         }
         .onChange(of: recorder.state) { _, newState in
             if case .finished(let session) = newState {
-                completedSession = session
+                handleFinishedRide(session)
             }
         }
         .task {
@@ -267,7 +330,10 @@ struct ContentView: View {
             tripShape: viewModel.tripShape,
             showsTripShapePicker: !viewModel.plannedRouteIsDistanceLoop,
             onTripShapeChange: { viewModel.setTripShape($0) },
-            onClear: { viewModel.clearPlannedRoute() },
+            onClear: {
+                activeSavedRouteID = nil
+                viewModel.clearPlannedRoute()
+            },
             onShowTurns: { showTurnsSheet = true },
             onStart: { startNavigation(route: planned) },
             onExportGPX: { exportGPX(for: planned) },
@@ -281,7 +347,10 @@ struct ContentView: View {
             tripShape: viewModel.tripShape,
             showsTripShapePicker: !viewModel.plannedRouteIsDistanceLoop,
             onTripShapeChange: { viewModel.setTripShape($0) },
-            onClear: { viewModel.clearPlannedRoute() },
+            onClear: {
+                activeSavedRouteID = nil
+                viewModel.clearPlannedRoute()
+            },
             onShowTurns: { showTurnsSheet = true },
             onStart: { startNavigation(route: planned) }
         )
@@ -293,6 +362,7 @@ struct ContentView: View {
             viewModel.routingError = .noPath(hint: "Bike network is still loading. Try again in a moment.")
             return
         }
+        rideWasNavigated = true
         if recorder.state != .recording {
             recorder.startRecording()
         }
@@ -312,12 +382,135 @@ struct ContentView: View {
         }
     }
 
+    private func handleFinishedRide(_ session: RideSession) {
+        let wasNavigated = rideWasNavigated || navigation.isNavigating
+        let linkedID = activeSavedRouteID
+        do {
+            let saved = try rideStore.saveRide(
+                session: session,
+                wasNavigated: wasNavigated,
+                linkedRouteID: linkedID,
+                graph: viewModel.routingGraph
+            )
+            completedRideWasAutoSaved = saved != nil
+            completedRideIsSaved = saved != nil
+            refreshSummaryMetadata(for: session, savedRide: saved)
+        } catch {
+            NSLog("[BikeNoCo] Auto-save failed: %@", error.localizedDescription)
+            completedRideWasAutoSaved = false
+            completedRideIsSaved = false
+            refreshSummaryMetadata(for: session, savedRide: nil)
+        }
+        completedSuggestedName = suggestedName(for: session)
+        completedSession = session
+        rideWasNavigated = false
+        activeSavedRouteID = nil
+    }
+
+    private func refreshSummaryMetadata(for session: RideSession, savedRide: SavedRide?) {
+        let ride = savedRide ?? (try? rideStore.fetchRide(id: session.id))
+        if let ride, let route = ride.route {
+            completedRouteName = route.name
+            completedRideOrdinal = route.rideOrdinal(for: ride)
+            completedIsPersonalBest = route.isPersonalBest(ride)
+            completedIsOnMyRoutes = true
+        } else {
+            completedRouteName = nil
+            completedRideOrdinal = nil
+            completedIsPersonalBest = false
+            completedIsOnMyRoutes = false
+        }
+    }
+
+    private func forceSaveCompletedRide(_ session: RideSession) {
+        do {
+            let saved = try rideStore.saveRide(
+                session: session,
+                wasNavigated: false,
+                linkedRouteID: nil,
+                graph: viewModel.routingGraph,
+                force: true
+            )
+            completedRideIsSaved = saved != nil
+            refreshSummaryMetadata(for: session, savedRide: saved)
+        } catch {
+            NSLog("[BikeNoCo] Manual save failed: %@", error.localizedDescription)
+        }
+    }
+
+    private func deleteCompletedRide(_ session: RideSession) {
+        do {
+            try rideStore.deleteRide(id: session.id)
+        } catch {
+            NSLog("[BikeNoCo] Delete ride failed: %@", error.localizedDescription)
+        }
+        completedSession = nil
+        recorder.discardAndReset()
+    }
+
+    private func addCompletedRideToMyRoutes(_ session: RideSession, name: String) {
+        guard let graph = viewModel.routingGraph else {
+            viewModel.routingError = .noPath(hint: "Bike network is still loading. Try again in a moment.")
+            return
+        }
+        do {
+            // Ensure the source ride exists before linking.
+            if try rideStore.fetchRide(id: session.id) == nil {
+                _ = try rideStore.saveRide(
+                    session: session,
+                    wasNavigated: false,
+                    force: true
+                )
+            }
+            let created = try rideStore.createRoute(from: session, name: name, graph: graph)
+            lastMatchQuality = created.matchQuality
+            #if DEBUG
+            NSLog(
+                "[BikeNoCo] Add to My Routes \"%@\" match quality %.1f%%",
+                name,
+                created.matchQuality * 100
+            )
+            #endif
+            completedRideIsSaved = true
+            completedIsOnMyRoutes = true
+            if let ride = try rideStore.fetchRide(id: session.id) {
+                refreshSummaryMetadata(for: session, savedRide: ride)
+            }
+        } catch {
+            NSLog("[BikeNoCo] Add to My Routes failed: %@", error.localizedDescription)
+            viewModel.routingError = .noPath(hint: error.localizedDescription)
+        }
+    }
+
+    private func suggestedName(for session: RideSession) -> String {
+        guard let graph = viewModel.routingGraph, session.coordinates.count >= 2 else {
+            return "My Route"
+        }
+        switch TrackToRouteConverter.convert(track: session.coordinates, graph: graph) {
+        case .success(let result):
+            return TrackToRouteConverter.suggestedName(for: result.plannedRoute)
+        case .failure:
+            return "My Route"
+        }
+    }
+
+    private func resetCompletedRideMetadata() {
+        completedRideWasAutoSaved = false
+        completedRideIsSaved = false
+        completedRouteName = nil
+        completedRideOrdinal = nil
+        completedIsPersonalBest = false
+        completedIsOnMyRoutes = false
+        completedSuggestedName = "My Route"
+    }
+
     #if DEBUG
     private func startSimulatedNavigation(route: PlannedRoute, injectDetour: Bool) {
         guard let graph = viewModel.routingGraph else {
             viewModel.routingError = .noPath(hint: "Bike network is still loading. Try again in a moment.")
             return
         }
+        rideWasNavigated = true
         if recorder.state != .recording {
             recorder.startRecording()
         }
@@ -330,6 +523,17 @@ struct ContentView: View {
             gpxShareURL = try GPXExporter.writeTemporaryFile(for: route)
         } catch {
             NSLog("[BikeNoCo] GPX export failed: %@", error.localizedDescription)
+        }
+    }
+
+    private func exportRideGPX(_ session: RideSession) {
+        do {
+            gpxShareURL = try GPXExporter.writeTemporaryFile(
+                forTrack: session.trackPoints,
+                name: "Ride \(session.startDate)"
+            )
+        } catch {
+            NSLog("[BikeNoCo] Ride GPX export failed: %@", error.localizedDescription)
         }
     }
     #endif

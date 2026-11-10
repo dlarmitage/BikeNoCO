@@ -3,39 +3,192 @@ import MapKit
 
 struct RideSummaryView: View {
     let session: RideSession
+    var isSaved: Bool
+    var needsManualSave: Bool
+    var routeName: String?
+    var rideOrdinal: Int?
+    var isPersonalBest: Bool
+    var suggestedRouteName: String
+    var riderWeightPounds: Double
+    var isAlreadyOnMyRoutes: Bool
+    /// When false, content is pushed inside an existing `NavigationStack` (no Done, uses back).
+    var embedsNavigationStack: Bool = true
+    var showsDoneButton: Bool = true
     let onDone: () -> Void
+    var onSave: (() -> Void)?
+    var onDelete: (() -> Void)?
+    var onAddToMyRoutes: ((String) -> Void)?
+
+    @State private var showDeleteConfirm = false
+    @State private var showNamePrompt = false
+    @State private var routeNameDraft = ""
+    @State private var isCreatingRoute = false
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 20) {
-                    RouteMapView(coordinates: session.coordinates)
-                        .frame(height: 220)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                        .padding(.horizontal)
+        if embedsNavigationStack {
+            NavigationStack { summaryBody }
+        } else {
+            summaryBody
+        }
+    }
 
-                    StatsGrid(session: session)
-                        .padding(.horizontal)
+    private var summaryBody: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                RouteMapView(coordinates: session.coordinates)
+                    .frame(height: 220)
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.horizontal)
 
-                    CaloriesCard(calories: session.estimatedCalories)
-                        .padding(.horizontal)
-
-                    Text("Calories estimated using a 154 lb / 70 kg rider weight.")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
-                        .padding(.horizontal)
+                if let routeName, let rideOrdinal {
+                    RouteHistoryBanner(
+                        routeName: routeName,
+                        ordinal: rideOrdinal,
+                        isPersonalBest: isPersonalBest
+                    )
+                    .padding(.horizontal)
                 }
-                .padding(.vertical)
+
+                StatsGrid(session: session)
+                    .padding(.horizontal)
+
+                CaloriesCard(calories: session.estimatedCalories)
+                    .padding(.horizontal)
+
+                Text(String(format: "Calories estimated using a %.0f lb rider weight.", riderWeightPounds))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .padding(.horizontal)
             }
-            .navigationTitle("Ride Summary")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done", action: onDone)
-                        .bold()
+            .padding(.vertical)
+        }
+        .navigationTitle("Ride Summary")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                HStack(spacing: 12) {
+                    if onAddToMyRoutes != nil {
+                        Button {
+                            if isAlreadyOnMyRoutes { return }
+                            routeNameDraft = suggestedRouteName
+                            showNamePrompt = true
+                        } label: {
+                            Image(systemName: isAlreadyOnMyRoutes ? "star.fill" : "star")
+                                .foregroundStyle(isAlreadyOnMyRoutes ? Color.orange : Color.accentColor)
+                        }
+                        .disabled(isCreatingRoute || isAlreadyOnMyRoutes)
+                        .accessibilityLabel(
+                            isAlreadyOnMyRoutes ? "On My Routes" : "Add to My Routes"
+                        )
+                    }
+
+                    if showsDoneButton {
+                        Button("Done", action: onDone)
+                            .bold()
+                    }
                 }
             }
         }
+        .safeAreaInset(edge: .bottom) {
+            if needsManualSave || isSaved {
+                VStack(spacing: 10) {
+                    if needsManualSave, let onSave {
+                        Button {
+                            onSave()
+                        } label: {
+                            Label("Save this ride", systemImage: "square.and.arrow.down")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+
+                    if isSaved, let onDelete {
+                        Button(role: .destructive) {
+                            showDeleteConfirm = true
+                        } label: {
+                            Label("Delete ride", systemImage: "trash")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.top, 10)
+                .padding(.bottom, 8)
+                .background(.bar)
+            }
+        }
+        .alert("Delete this ride?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) { onDelete?() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently removes the ride from My Rides.")
+        }
+        .alert("Add to My Routes", isPresented: $showNamePrompt) {
+            TextField("Route name", text: $routeNameDraft)
+            Button("Cancel", role: .cancel) {}
+            Button("Save") {
+                let name = routeNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !name.isEmpty else { return }
+                isCreatingRoute = true
+                onAddToMyRoutes?(name)
+            }
+        } message: {
+            Text("Name this route so you can ride it again and compare times.")
+        }
+        .onAppear {
+            routeNameDraft = suggestedRouteName
+        }
+        .onChange(of: isAlreadyOnMyRoutes) { _, starred in
+            if starred { isCreatingRoute = false }
+        }
+        .onChange(of: suggestedRouteName) { _, newName in
+            if !showNamePrompt {
+                routeNameDraft = newName
+            }
+        }
+    }
+}
+
+private struct RouteHistoryBanner: View {
+    let routeName: String
+    let ordinal: Int
+    let isPersonalBest: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.triangle.turn.up.right.diamond.fill")
+                .foregroundStyle(.tint)
+            Text("\(ordinal.ordinalLabel) time on \(routeName)")
+                .font(.subheadline.weight(.semibold))
+            Spacer(minLength: 0)
+            if isPersonalBest {
+                Label("Personal best", systemImage: "trophy.fill")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(12)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private extension Int {
+    var ordinalLabel: String {
+        let mod100 = self % 100
+        let mod10 = self % 10
+        let suffix: String
+        if (11...13).contains(mod100) {
+            suffix = "th"
+        } else {
+            switch mod10 {
+            case 1: suffix = "st"
+            case 2: suffix = "nd"
+            case 3: suffix = "rd"
+            default: suffix = "th"
+            }
+        }
+        return "\(self)\(suffix)"
     }
 }
 

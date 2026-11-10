@@ -83,6 +83,42 @@ enum GPXExporter {
         return url
     }
 
+    static func gpxString(forTrack points: [TrackPoint], name: String = "BikeNoCo Ride") -> String {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime]
+        var lines: [String] = []
+        lines.append(#"<?xml version="1.0" encoding="UTF-8"?>"#)
+        lines.append(
+            #"<gpx version="1.1" creator="BikeNoCo" xmlns="http://www.topografix.com/GPX/1/1">"#
+        )
+        lines.append("<trk>")
+        lines.append("<name>\(xmlEscape(name))</name>")
+        lines.append("<trkseg>")
+        for point in points {
+            lines.append(
+                String(
+                    format: "<trkpt lat=\"%.8f\" lon=\"%.8f\"><ele>%.2f</ele><time>%@</time></trkpt>",
+                    point.coordinate.latitude,
+                    point.coordinate.longitude,
+                    point.altitude,
+                    iso.string(from: point.timestamp)
+                )
+            )
+        }
+        lines.append("</trkseg>")
+        lines.append("</trk>")
+        lines.append("</gpx>")
+        return lines.joined(separator: "\n")
+    }
+
+    static func writeTemporaryFile(forTrack points: [TrackPoint], name: String = "BikeNoCo Ride") throws -> URL {
+        let data = Data(gpxString(forTrack: points, name: name).utf8)
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bikenoco-ride-\(UUID().uuidString).gpx")
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
     private static func xmlEscape(_ value: String) -> String {
         value
             .replacingOccurrences(of: "&", with: "&amp;")

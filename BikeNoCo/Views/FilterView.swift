@@ -3,6 +3,7 @@ import SwiftUI
 struct FilterView: View {
     @ObservedObject var viewModel: MapViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var riderWeightPounds: Double = RiderSettings.weightPounds
 
     private var infrastructureTypes: [FacilityType] {
         FacilityType.allCases.filter { $0 != .recommendedRide }
@@ -11,6 +12,30 @@ struct FilterView: View {
     var body: some View {
         NavigationStack {
             List {
+                Section {
+                    HStack {
+                        Text("Rider weight")
+                        Spacer()
+                        TextField(
+                            "lb",
+                            value: $riderWeightPounds,
+                            format: .number.precision(.fractionLength(0))
+                        )
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 64)
+                        Text("lb")
+                            .foregroundStyle(.secondary)
+                    }
+                    .onChange(of: riderWeightPounds) { _, newValue in
+                        RiderSettings.weightPounds = newValue
+                    }
+                } header: {
+                    Text("Settings")
+                } footer: {
+                    Text("Used for calorie estimates. Default is 154 lb (70 kg).")
+                }
+
                 if !viewModel.recommendedRoutes.isEmpty {
                     Section {
                         ForEach(viewModel.recommendedRoutes) { route in

@@ -19,6 +19,10 @@ alwaysApply: true
 - Existing data model: `BikeRoute` (in `Models/BikeRoute.swift`) with `FacilityType`, optional `lts`, `streetName`, `bikewayName`, `paths: [[CLLocationCoordinate2D]]`. `.recommendedRide` routes are RideWithGPS overlays, not infrastructure; exclude them from the routing graph.
 - `lts` is nil for all trails and all Loveland data. Treat nil carefully; do not assume nil means high stress.
 
+## SwiftData schema
+- Persisted ride/route models live under `BikeNoCo/Persistence/` and are versioned via `BikeNoCoSchemaV1` + `BikeNoCoMigrationPlan` (see `PersistenceController`).
+- Any change to a `@Model` type (add/remove/rename a property, change a type or relationship) requires a **new** `VersionedSchema` (e.g. `BikeNoCoSchemaV2`) and a migration stage in `BikeNoCoMigrationPlan`. Do not mutate an existing schema version in place.
+
 ## Verify your own work
 Pick an available simulator once with `xcrun simctl list devices available` and reuse it.
 

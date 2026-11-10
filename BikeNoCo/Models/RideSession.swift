@@ -32,7 +32,12 @@ struct RideSession: Identifiable {
     var coordinates: [CLLocationCoordinate2D] { trackPoints.map { $0.coordinate } }
 
     static func calculate(
-        points: [TrackPoint], start: Date, end: Date, movingDuration: TimeInterval? = nil
+        points: [TrackPoint],
+        start: Date,
+        end: Date,
+        movingDuration: TimeInterval? = nil,
+        weightKilograms: Double = RiderSettings.weightKilograms,
+        elevationOverride: (gain: Double, loss: Double)? = nil
     ) -> RideSession {
         let accurate = points.filter { $0.horizontalAccuracy >= 0 && $0.horizontalAccuracy <= 30 }
         let activeDuration = movingDuration ?? end.timeIntervalSince(start)
@@ -56,19 +61,28 @@ struct RideSession: Identifiable {
         let avgSpeed = validSpeeds.isEmpty ? 0 : validSpeeds.reduce(0, +) / Double(validSpeeds.count)
         let maxSpeed = validSpeeds.max() ?? 0
 
-        // Elevation — 2 m threshold filters GPS noise
-        var gain: Double = 0
-        var loss: Double = 0
-        let vertAccurate = points.filter { $0.verticalAccuracy >= 0 && $0.verticalAccuracy <= 15 }
-        if vertAccurate.count > 1 {
-            for i in 1..<vertAccurate.count {
-                let diff = vertAccurate[i].altitude - vertAccurate[i-1].altitude
-                if diff > 2 { gain += diff }
-                else if diff < -2 { loss += abs(diff) }
+        // Elevation — prefer barometric override; else GPS with 2 m threshold.
+        let gain: Double
+        let loss: Double
+        if let elevationOverride {
+            gain = elevationOverride.gain
+            loss = elevationOverride.loss
+        } else {
+            var gpsGain: Double = 0
+            var gpsLoss: Double = 0
+            let vertAccurate = points.filter { $0.verticalAccuracy >= 0 && $0.verticalAccuracy <= 15 }
+            if vertAccurate.count > 1 {
+                for i in 1..<vertAccurate.count {
+                    let diff = vertAccurate[i].altitude - vertAccurate[i-1].altitude
+                    if diff > 2 { gpsGain += diff }
+                    else if diff < -2 { gpsLoss += abs(diff) }
+                }
             }
+            gain = gpsGain
+            loss = gpsLoss
         }
 
-        // Calories: MET × 70 kg default × hours of moving time
+        // Calories: MET × rider weight (kg) × hours of moving time
         let hours = activeDuration / 3600
         let avgMPH = avgSpeed * 2.23694
         let met: Double
@@ -78,7 +92,7 @@ struct RideSession: Identifiable {
         case 12..<15: met = 10.0
         default: met = 12.0
         }
-        let calories = met * 70.0 * hours
+        let calories = met * weightKilograms * hours
 
         return RideSession(
             id: UUID(),
