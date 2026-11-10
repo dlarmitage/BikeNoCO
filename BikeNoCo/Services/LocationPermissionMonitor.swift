@@ -12,6 +12,18 @@ final class LocationPermissionMonitor: NSObject, ObservableObject, CLLocationMan
         authorizationStatus = manager.authorizationStatus
     }
 
+    /// Ask for When In Use so the map can show a blue dot and routing has an origin.
+    func requestWhenInUseIfNeeded() {
+        switch manager.authorizationStatus {
+        case .notDetermined:
+            manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            break
+        default:
+            break
+        }
+    }
+
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         DispatchQueue.main.async {
             self.authorizationStatus = manager.authorizationStatus

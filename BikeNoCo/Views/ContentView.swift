@@ -29,6 +29,7 @@ struct ContentView: View {
                 trackingMode: $viewModel.trackingMode,
                 focusRouteID: $viewModel.focusRouteID,
                 focusCoordinate: $focusCoordinate,
+                cameraCommand: $viewModel.cameraCommand,
                 onLongPressDestination: { coordinate in
                     viewModel.planRoute(to: coordinate)
                 }
@@ -92,7 +93,17 @@ struct ContentView: View {
                         systemImage: "location.fill",
                         isActive: viewModel.trackingMode == .follow
                     ) {
-                        viewModel.trackingMode = viewModel.trackingMode == .follow ? .none : .follow
+                        viewModel.toggleLocationTracking()
+                    }
+
+                    MapControlButton(systemImage: "plus.magnifyingglass") {
+                        viewModel.trackingMode = .none
+                        viewModel.cameraCommand = .zoomIn
+                    }
+
+                    MapControlButton(systemImage: "minus.magnifyingglass") {
+                        viewModel.trackingMode = .none
+                        viewModel.cameraCommand = .zoomOut
                     }
 
                     MapControlButton(
@@ -180,6 +191,7 @@ struct ContentView: View {
             }
         }
         .task {
+            locationMonitor.requestWhenInUseIfNeeded()
             await viewModel.loadRoutes()
         }
     }

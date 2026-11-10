@@ -79,7 +79,7 @@ All of `BikeNoCo/Routing/` is pure Swift (Foundation + CoreLocation). Views and 
 
 - **LTS modifier:** LTS 3 x1.5, LTS 4 x3.0, nil = no modifier. Optional hard cap `maxLTS` removes edges above it.
 - **Heuristic:** straight-line distance x the smallest multiplier in the profile, so it stays admissible.
-- **Snapping:** project origin and destination onto the nearest edge (not just node) within `maxSnapMeters` (default 150 m) and insert temporary virtual nodes. If either fails, return a clear error instead of a bad route.
+- **Snapping:** project origin and destination onto the nearest edge (not just node) within `maxSnapMeters` (default 300 m) and insert temporary virtual nodes. If either fails, return a clear error instead of a bad route.
 - **Output `PlannedRoute`:** ordered edge list, full coordinate list, total distance, distance per facility type, share of low-stress mileage, and a dominant-name summary.
 - **Low-stress mileage** (honest mixed ArcGIS + OSM definition):
   - **Counts as low-stress:** paved/natural trail; ArcGIS with LTS ≤ 2; OSM `cycleway` / `path` / `track`; OSM `footway` / `pedestrian` (bike-allowed connectors); OSM `residential` / `living_street`; synthetic attachment edges.

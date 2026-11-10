@@ -11,7 +11,7 @@ enum RoutingError: Error, Equatable, Sendable {
         case .originTooFar:
             return "You're too far from the bike network to start a route. Move closer to a trail or bike lane."
         case .destinationTooFar:
-            return "That destination is too far from the bike network (more than 150 m from any trail or bike lane)."
+            return "That destination is too far from the bike network (more than 300 m from any trail or bike lane)."
         case .noPath(let hint):
             if let hint, !hint.isEmpty {
                 return hint

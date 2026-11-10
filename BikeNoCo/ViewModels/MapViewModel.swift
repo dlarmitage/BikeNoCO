@@ -2,6 +2,12 @@ import Foundation
 import MapKit
 import Combine
 
+enum MapCameraCommand: Equatable {
+    case zoomIn
+    case zoomOut
+    case fortCollins
+}
+
 enum MapStyle: String, CaseIterable, Identifiable {
     case standard = "Standard"
     case muted = "Muted"
@@ -37,9 +43,11 @@ final class MapViewModel: ObservableObject {
     @Published var loadProgress: Double = 0
     @Published var errorMessage: String?
     @Published var mapStyle: MapStyle = .hybrid
-    @Published var trackingMode: MKUserTrackingMode = .follow
+    @Published var trackingMode: MKUserTrackingMode = .none
     @Published var focusRouteID: UUID?
     @Published var activeRouteID: UUID?
+    /// One-shot camera commands consumed by `BikeMapView` (zoom / Fort Collins recenter).
+    @Published var cameraCommand: MapCameraCommand?
 
     @Published var userCoordinate: CLLocationCoordinate2D?
     @Published var routeDestination: CLLocationCoordinate2D?
@@ -179,20 +187,49 @@ final class MapViewModel: ObservableObject {
         #endif
     }
 
+    /// Approximate Northern Colorado coverage (Fort Collins / Loveland / Greeley).
+    static func isInNorthernColorado(_ coordinate: CLLocationCoordinate2D) -> Bool {
+        (40.25...40.85).contains(coordinate.latitude)
+            && (-105.35 ... -104.55).contains(coordinate.longitude)
+    }
+
+    /// Used when GPS is missing or still the Simulator's Bay Area default.
+    static let fortCollinsOrigin = CLLocationCoordinate2D(latitude: 40.5853, longitude: -105.0844)
+
+    /// Prefer a live NoCo fix; otherwise fall back so desk testing still works.
+    var routingOrigin: CLLocationCoordinate2D {
+        if let coordinate = userCoordinate, Self.isInNorthernColorado(coordinate) {
+            return coordinate
+        }
+        return Self.fortCollinsOrigin
+    }
+
+    /// Toggle follow-me when the user is in NoCo; otherwise recenter on Fort Collins.
+    /// Avoids Simulator's default Bay Area location yanking the map to San Francisco.
+    func toggleLocationTracking() {
+        if trackingMode == .follow {
+            trackingMode = .none
+            return
+        }
+        if let coordinate = userCoordinate, Self.isInNorthernColorado(coordinate) {
+            trackingMode = .follow
+        } else {
+            trackingMode = .none
+            cameraCommand = .fortCollins
+        }
+    }
+
     func planRoute(to destination: CLLocationCoordinate2D) {
         routeDestination = destination
         routingError = nil
         plannedRoute = nil
 
-        guard let origin = userCoordinate else {
-            routingError = .originTooFar
-            return
-        }
         guard let graph = networkGraph else {
             routingError = .noPath(hint: "Bike network is still loading. Try again in a moment.")
             return
         }
 
+        let origin = routingOrigin
         isRouting = true
         routeGeneration += 1
         let generation = routeGeneration

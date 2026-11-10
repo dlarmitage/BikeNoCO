@@ -134,13 +134,14 @@ final class RouteFinderTests: XCTestCase {
         )
         let graph = BikeNetworkGraphBuilder.build(from: [segment], config: config)
 
-        let farOrigin = at(LocalPoint(x: 0, y: 200))
+        // Default maxSnapMeters is 300; place queries clearly beyond that.
+        let farOrigin = at(LocalPoint(x: 0, y: 400))
         let nearDest = at(LocalPoint(x: 100, y: 0))
         let originResult = RouteFinder.route(from: farOrigin, to: nearDest, graph: graph)
         XCTAssertEqual(originResult, .failure(.originTooFar))
 
         let nearOrigin = at(LocalPoint(x: 0, y: 0))
-        let farDest = at(LocalPoint(x: 100, y: 200))
+        let farDest = at(LocalPoint(x: 100, y: 400))
         let destResult = RouteFinder.route(from: nearOrigin, to: farDest, graph: graph)
         XCTAssertEqual(destResult, .failure(.destinationTooFar))
     }

@@ -47,7 +47,9 @@ struct RoutingProfile: Sendable {
         ],
         maxLTS: nil,
         avoidNaturalSurface: false,
-        maxSnapMeters: 150
+        // Walking distance onto the network; generous enough for residential blocks
+        // and Simulator long-presses that miss the polyline by a bit.
+        maxSnapMeters: 300
     )
 
     /// Smallest facility/connector multiplier in the profile (for an admissible A* heuristic).

@@ -113,6 +113,7 @@
 		ED3169E27185453028E996AE /* BikeNoCo.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = BikeNoCo.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F50DF6580FF822DC0B8CAFB1 /* LocationPermissionMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPermissionMonitor.swift; sourceTree = "<group>"; };
 		F7A8F263F282BA9F57274B78 /* PlannedRoute.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlannedRoute.swift; sourceTree = "<group>"; };
+		FD19F29D53941BB4E983240B /* FortCollins.gpx */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = FortCollins.gpx; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -128,6 +129,7 @@
 			isa = PBXGroup;
 			children = (
 				B1B0727BC7CB18D6683B199C /* Assets.xcassets */,
+				FD19F29D53941BB4E983240B /* FortCollins.gpx */,
 				CBDB9F11B632E0EBA52B559E /* Info.plist */,
 				630D869190FA08918A7A3CF9 /* osm_connectors.json */,
 				02155B5A37FB5708B98DEAAE /* PrivacyInfo.xcprivacy */,

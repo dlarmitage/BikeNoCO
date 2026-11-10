@@ -13,6 +13,9 @@ targets:
       - path: BikeNoCo
     resources:
       - path: BikeNoCo/Resources/osm_connectors.json
+    # GPX for scheme location simulation (not copied into the app bundle).
+    fileGroups:
+      - BikeNoCo/Resources/FortCollins.gpx
     info:
       path: BikeNoCo/Resources/Info.plist
       properties:
@@ -75,6 +78,9 @@ schemes:
         BikeNoCoTests: [test]
     run:
       config: Debug
+      simulateLocation:
+        allow: true
+        defaultLocation: BikeNoCo/Resources/FortCollins.gpx
     test:
       config: Debug
       targets:

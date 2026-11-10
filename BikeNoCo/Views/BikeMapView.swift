@@ -12,9 +12,10 @@ struct BikeMapView: UIViewRepresentable {
     @Binding var trackingMode: MKUserTrackingMode
     @Binding var focusRouteID: UUID?
     @Binding var focusCoordinate: CLLocationCoordinate2D?
+    @Binding var cameraCommand: MapCameraCommand?
     var onLongPressDestination: ((CLLocationCoordinate2D) -> Void)?
 
-    private static let fortCollinsRegion = MKCoordinateRegion(
+    static let fortCollinsRegion = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 40.5853, longitude: -105.0844),
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.06)
     )
@@ -26,6 +27,8 @@ struct BikeMapView: UIViewRepresentable {
         mapView.showsUserLocation = true
         mapView.showsCompass = false
         mapView.showsScale = true
+        mapView.isZoomEnabled = true
+        mapView.isScrollEnabled = true
         mapView.setRegion(Self.fortCollinsRegion, animated: false)
 
         let tap = UITapGestureRecognizer(target: context.coordinator,
@@ -40,6 +43,17 @@ struct BikeMapView: UIViewRepresentable {
         longPress.minimumPressDuration = 0.45
         mapView.addGestureRecognizer(longPress)
 
+        // Mouse / trackpad scroll wheel → zoom (Simulator + pointer devices).
+        // MapKit does not zoom on scroll by default.
+        let scrollZoom = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleScrollZoom(_:))
+        )
+        scrollZoom.delegate = context.coordinator
+        scrollZoom.allowedScrollTypesMask = .continuous
+        scrollZoom.maximumNumberOfTouches = 0
+        mapView.addGestureRecognizer(scrollZoom)
+
         return mapView
     }
 
@@ -50,6 +64,18 @@ struct BikeMapView: UIViewRepresentable {
         if mapView.mapType != mapType { mapView.mapType = mapType }
         if mapView.userTrackingMode != trackingMode {
             mapView.setUserTrackingMode(trackingMode, animated: true)
+        }
+
+        if let command = cameraCommand {
+            switch command {
+            case .zoomIn:
+                Self.zoom(mapView, factor: 0.5)
+            case .zoomOut:
+                Self.zoom(mapView, factor: 2.0)
+            case .fortCollins:
+                mapView.setRegion(Self.fortCollinsRegion, animated: true)
+            }
+            DispatchQueue.main.async { self.cameraCommand = nil }
         }
 
         let routeIDs = Set(routes.map { $0.id })
@@ -155,6 +181,15 @@ struct BikeMapView: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
+    /// Scale the current region span by `factor` (< 1 zooms in, > 1 zooms out).
+    static func zoom(_ mapView: MKMapView, factor: Double) {
+        var region = mapView.region
+        let lat = min(max(region.span.latitudeDelta * factor, 0.0004), 60)
+        let lon = min(max(region.span.longitudeDelta * factor, 0.0004), 60)
+        region.span = MKCoordinateSpan(latitudeDelta: lat, longitudeDelta: lon)
+        mapView.setRegion(region, animated: true)
+    }
+
     private static func sameCoordinate(_ a: CLLocationCoordinate2D?, _ b: CLLocationCoordinate2D?) -> Bool {
         switch (a, b) {
         case (nil, nil): return true
@@ -212,10 +247,31 @@ struct BikeMapView: UIViewRepresentable {
             }
             guard !hasZoomedToUser else { return }
             hasZoomedToUser = true
+            // Skip auto-zoom when Simulator (or device) reports a far-away fix —
+            // keep the Fort Collins startup region instead of jumping to SF.
+            guard MapViewModel.isInNorthernColorado(coordinate) else { return }
             mapView.setRegion(
                 MKCoordinateRegion(center: coordinate, span: BikeMapView.preferredSpan),
                 animated: true
             )
+        }
+
+        @objc func handleScrollZoom(_ gesture: UIPanGestureRecognizer) {
+            guard let mapView = gesture.view as? MKMapView else { return }
+            let dy = gesture.translation(in: mapView).y
+            gesture.setTranslation(.zero, in: mapView)
+            guard abs(dy) > 0.05 else { return }
+
+            if parent.trackingMode != .none {
+                DispatchQueue.main.async { self.parent.trackingMode = .none }
+            }
+
+            // Scroll up → zoom in (smaller span); scroll down → zoom out.
+            let factor = exp(Double(dy) * 0.012)
+            var region = mapView.region
+            region.span.latitudeDelta = min(max(region.span.latitudeDelta * factor, 0.0004), 60)
+            region.span.longitudeDelta = min(max(region.span.longitudeDelta * factor, 0.0004), 60)
+            mapView.setRegion(region, animated: false)
         }
 
         func mapView(_ mapView: MKMapView, didChange mode: MKUserTrackingMode, animated: Bool) {
