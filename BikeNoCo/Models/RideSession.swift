@@ -37,6 +37,7 @@ struct RideSession: Identifiable {
         end: Date,
         movingDuration: TimeInterval? = nil,
         weightKilograms: Double = RiderSettings.weightKilograms,
+        bikeType: BikeType = RiderSettings.bikeType,
         elevationOverride: (gain: Double, loss: Double)? = nil
     ) -> RideSession {
         let accurate = points.filter { $0.horizontalAccuracy >= 0 && $0.horizontalAccuracy <= 30 }
@@ -61,28 +62,23 @@ struct RideSession: Identifiable {
         let avgSpeed = validSpeeds.isEmpty ? 0 : validSpeeds.reduce(0, +) / Double(validSpeeds.count)
         let maxSpeed = validSpeeds.max() ?? 0
 
-        // Elevation — prefer barometric override; else GPS with 2 m threshold.
+        // Elevation — cumulative ascent/descent (not net). Prefer barometer when it
+        // recorded real change; otherwise GPS. Never drop mid-climb points solely for
+        // mediocre verticalAccuracy (that zeros out-and-back rides).
+        let gpsElevation = ElevationCalculator.fromGPS(
+            altitudesWithAccuracy: points.map { ($0.altitude, $0.verticalAccuracy) }
+        )
         let gain: Double
         let loss: Double
-        if let elevationOverride {
+        if let elevationOverride, elevationOverride.gain + elevationOverride.loss > 0 {
             gain = elevationOverride.gain
             loss = elevationOverride.loss
         } else {
-            var gpsGain: Double = 0
-            var gpsLoss: Double = 0
-            let vertAccurate = points.filter { $0.verticalAccuracy >= 0 && $0.verticalAccuracy <= 15 }
-            if vertAccurate.count > 1 {
-                for i in 1..<vertAccurate.count {
-                    let diff = vertAccurate[i].altitude - vertAccurate[i-1].altitude
-                    if diff > 2 { gpsGain += diff }
-                    else if diff < -2 { gpsLoss += abs(diff) }
-                }
-            }
-            gain = gpsGain
-            loss = gpsLoss
+            gain = gpsElevation.gainMeters
+            loss = gpsElevation.lossMeters
         }
 
-        // Calories: MET × rider weight (kg) × hours of moving time
+        // Calories: MET × bike factor × rider weight (kg) × hours of moving time
         let hours = activeDuration / 3600
         let avgMPH = avgSpeed * 2.23694
         let met: Double
@@ -92,7 +88,7 @@ struct RideSession: Identifiable {
         case 12..<15: met = 10.0
         default: met = 12.0
         }
-        let calories = met * weightKilograms * hours
+        let calories = met * bikeType.calorieMultiplier * weightKilograms * hours
 
         return RideSession(
             id: UUID(),

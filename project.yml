@@ -85,9 +85,10 @@ schemes:
         BikeNoCoTests: [test]
     run:
       config: Debug
+      # Allow Debug → Simulate Location, but do not auto-load a GPX.
+      # A defaultLocation overrides real GPS on physical devices when Run from Xcode.
       simulateLocation:
         allow: true
-        defaultLocation: BikeNoCo/Resources/FortCollins.gpx
     test:
       config: Debug
       targets:

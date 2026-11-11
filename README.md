@@ -10,7 +10,7 @@ A cycling map for Fort Collins and Loveland, Colorado. Built with SwiftUI and Ma
 - **Level of Traffic Stress (LTS)** — tap any route segment to see its stress rating and speed limit
 - **Suggested rides** — four curated road rides from [BikeForFortCollins.org](https://bikefortcollins.org), with distance, elevation, and route description. Select one to preview it on the map
 - **Ride recorder** — GPS tracking with elapsed time, distance, and live speed; continues recording in the background
-- **Map styles** — satellite, hybrid, standard, and muted
+- **Map styles** — satellite, hybrid, and standard
 
 ## Screenshots
 

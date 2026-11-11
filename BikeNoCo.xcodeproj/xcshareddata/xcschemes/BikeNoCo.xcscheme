@@ -88,10 +88,6 @@
             ReferencedContainer = "container:BikeNoCo.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <LocationScenarioReference
-         identifier = "../../BikeNoCo/Resources/FortCollins.gpx"
-         referenceType = "0">
-      </LocationScenarioReference>
       <CommandLineArguments>
       </CommandLineArguments>
    </LaunchAction>

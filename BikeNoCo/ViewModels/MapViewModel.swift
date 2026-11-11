@@ -6,11 +6,12 @@ enum MapCameraCommand: Equatable {
     case zoomIn
     case zoomOut
     case fortCollins
+    /// Keep center/zoom; set heading and pitch to north-up / flat.
+    case northUp
 }
 
 enum MapStyle: String, CaseIterable, Identifiable {
     case standard = "Standard"
-    case muted = "Muted"
     case satellite = "Satellite"
     case hybrid = "Hybrid"
 
@@ -19,7 +20,6 @@ enum MapStyle: String, CaseIterable, Identifiable {
     var mapType: MKMapType {
         switch self {
         case .standard: return .standard
-        case .muted:    return .mutedStandard
         case .satellite: return .satellite
         case .hybrid:   return .hybrid
         }
@@ -28,7 +28,6 @@ enum MapStyle: String, CaseIterable, Identifiable {
     var icon: String {
         switch self {
         case .standard:  return "map"
-        case .muted:     return "map.fill"
         case .satellite: return "globe.americas.fill"
         case .hybrid:    return "square.2.layers.3d.fill"
         }
@@ -67,8 +66,12 @@ final class MapViewModel: ObservableObject {
     @Published var loopTargetMiles: Double = 10
     @Published var loopMaxLTS: Int? = nil
     @Published var loopPreferTrails = false
+    /// When true, loop search starts from a long-pressed map pin (`routeDestination`).
+    @Published var loopStartUsesPin = false
     /// True when `plannedRoute` came from the distance-loop planner (hide via-shape picker).
     @Published private(set) var plannedRouteIsDistanceLoop = false
+    /// Cancellation flag for the in-flight distance-loop search.
+    private var loopSearchToken = LoopSearchToken()
 
     private let service = ArcGISService()
     private var networkGraph: BikeNetworkGraph?
@@ -225,13 +228,21 @@ final class MapViewModel: ObservableObject {
 
     /// Toggle follow-me when the user is in NoCo; otherwise recenter on Fort Collins.
     /// Avoids Simulator's default Bay Area location yanking the map to San Francisco.
+    /// Re-engaging follow always restores north-up (escape hatch after heading-up navigation).
     func toggleLocationTracking() {
         if trackingMode == .follow {
             trackingMode = .none
             return
         }
+        if trackingMode == .followWithHeading {
+            // Step out of heading-up into north-up follow.
+            trackingMode = .follow
+            cameraCommand = .northUp
+            return
+        }
         if let coordinate = userCoordinate, Self.isInNorthernColorado(coordinate) {
             trackingMode = .follow
+            cameraCommand = .northUp
         } else {
             trackingMode = .none
             cameraCommand = .fortCollins
@@ -452,22 +463,32 @@ final class MapViewModel: ObservableObject {
         plannedRouteIsDistanceLoop = false
     }
 
-    /// Origin for distance-loop search: pin if set, else live NoCo fix, else Fort Collins.
+    /// Origin for distance-loop search: optional map pin, else live NoCo fix, else Fort Collins.
     var loopSearchOrigin: CLLocationCoordinate2D {
-        if let pin = routeDestination {
+        if loopStartUsesPin, let pin = routeDestination {
             return pin
         }
         return routingOrigin
     }
 
-    var loopSearchUsesPin: Bool { routeDestination != nil }
+    var loopSearchUsesPin: Bool { loopStartUsesPin && routeDestination != nil }
 
     func searchLoops() {
         guard let graph = networkGraph else {
             loopSearchError = "Bike network is still loading. Try again in a moment."
+            isSearchingLoops = false
             return
         }
+        if loopStartUsesPin && routeDestination == nil {
+            loopSearchError = "Long-press the map to drop a start pin, then try again."
+            isSearchingLoops = false
+            return
+        }
+
         let constraints = currentLoopConstraints()
+        let token = LoopSearchToken()
+        loopSearchToken.cancel()
+        loopSearchToken = token
         isSearchingLoops = true
         loopSearchError = nil
         loopCandidates = []
@@ -476,28 +497,43 @@ final class MapViewModel: ObservableObject {
         loopSearchGeneration += 1
         let generation = loopSearchGeneration
         let profile = RoutingProfile.default
+        NSLog(
+            "[BikeNoCo Loop] search start — %.0f mi, maxLTS=%@, trails=%d, pin=%d",
+            loopTargetMiles,
+            loopMaxLTS.map(String.init) ?? "any",
+            loopPreferTrails ? 1 : 0,
+            loopSearchUsesPin ? 1 : 0
+        )
 
-        Task.detached(priority: .userInitiated) {
-            let result = DistanceLoopPlanner.search(
-                constraints: constraints,
-                graph: graph,
-                profile: profile,
-                onShortlistChanged: { shortlist in
-                    Task { @MainActor in
-                        guard generation == self.loopSearchGeneration else { return }
-                        self.loopCandidates = shortlist
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                DistanceLoopPlanner.search(
+                    constraints: constraints,
+                    graph: graph,
+                    profile: profile,
+                    isCancelled: { token.isCancelled },
+                    onShortlistChanged: { shortlist in
+                        Task { @MainActor in
+                            guard generation == self.loopSearchGeneration else { return }
+                            self.loopCandidates = shortlist
+                        }
                     }
-                }
+                )
+            }.value
+
+            guard generation == loopSearchGeneration else { return }
+            isSearchingLoops = false
+            lastLoopSearchSeconds = result.elapsedSeconds
+            lastLoopTimeToFirstSeconds = result.timeToFirstResultSeconds
+            loopCandidates = result.candidates
+            NSLog(
+                "[BikeNoCo Loop] search done — %d candidates in %.2fs",
+                result.candidates.count,
+                result.elapsedSeconds
             )
-            await MainActor.run {
-                guard generation == self.loopSearchGeneration else { return }
-                self.isSearchingLoops = false
-                self.lastLoopSearchSeconds = result.elapsedSeconds
-                self.lastLoopTimeToFirstSeconds = result.timeToFirstResultSeconds
-                self.loopCandidates = result.candidates
-                if result.candidates.isEmpty {
-                    self.loopSearchError = "Couldn't find loops near that distance. Try a different length or loosen Max LTS."
-                }
+            if result.candidates.isEmpty && !token.isCancelled {
+                loopSearchError =
+                    "Couldn't find loops near that distance. Try a different length, allow busier streets, or turn off Prefer trails."
             }
         }
     }
@@ -527,6 +563,7 @@ final class MapViewModel: ObservableObject {
     }
 
     func cancelLoopSearch() {
+        loopSearchToken.cancel()
         loopSearchGeneration += 1
         isSearchingLoops = false
     }
@@ -607,5 +644,23 @@ final class MapViewModel: ObservableObject {
 
     func hideAll() {
         visibleTypes = []
+    }
+}
+
+/// Shared cancel flag for a background distance-loop search.
+private final class LoopSearchToken: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
     }
 }

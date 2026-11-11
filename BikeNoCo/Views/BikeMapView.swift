@@ -30,10 +30,13 @@ struct BikeMapView: UIViewRepresentable {
         let mapView = MKMapView()
         mapView.delegate = context.coordinator
         mapView.showsUserLocation = true
-        mapView.showsCompass = false
+        // Compass appears when the map is rotated; tap it to restore north-up.
+        mapView.showsCompass = true
         mapView.showsScale = true
         mapView.isZoomEnabled = true
         mapView.isScrollEnabled = true
+        mapView.isRotateEnabled = true
+        mapView.isPitchEnabled = true
         mapView.setRegion(Self.fortCollinsRegion, animated: false)
 
         let tap = UITapGestureRecognizer(target: context.coordinator,
@@ -91,9 +94,17 @@ struct BikeMapView: UIViewRepresentable {
                 Self.zoom(mapView, factor: 2.0)
             case .fortCollins:
                 mapView.setRegion(Self.fortCollinsRegion, animated: true)
+            case .northUp:
+                Self.applyNorthUpCamera(on: mapView, center: userPuckLocation?.coordinate)
             }
             DispatchQueue.main.async { self.cameraCommand = nil }
         }
+
+        // Entering north-up follow should reorient immediately (don't wait for movement).
+        if trackingMode == .follow, c.lastAppliedTrackingMode != .follow {
+            Self.applyNorthUpCamera(on: mapView, center: userPuckLocation?.coordinate)
+        }
+        c.lastAppliedTrackingMode = trackingMode
 
         let routeIDs = Set(routes.map { $0.id })
         let routesChanged = routeIDs != c.lastRouteIDs
@@ -213,6 +224,25 @@ struct BikeMapView: UIViewRepresentable {
         mapView.setRegion(region, animated: true)
     }
 
+    /// Flat, north-up camera at the current (or given) center, preserving zoom distance.
+    static func applyNorthUpCamera(on mapView: MKMapView, center: CLLocationCoordinate2D?) {
+        let coordinate = center ?? mapView.centerCoordinate
+        let distance = mapView.camera.centerCoordinateDistance
+        let camera = MKMapCamera(
+            lookingAtCenter: coordinate,
+            fromDistance: distance > 1 ? distance : 1_000,
+            pitch: 0,
+            heading: 0
+        )
+        mapView.setCamera(camera, animated: true)
+    }
+
+    /// True while the rider is pinching/panning/rotating — skip programmatic camera fights.
+    static func isActivelyGesturing(_ mapView: MKMapView) -> Bool {
+        guard let recognizers = mapView.gestureRecognizers else { return false }
+        return recognizers.contains { $0.state == .began || $0.state == .changed }
+    }
+
     private static func sameCoordinate(_ a: CLLocationCoordinate2D?, _ b: CLLocationCoordinate2D?) -> Bool {
         switch (a, b) {
         case (nil, nil): return true
@@ -243,6 +273,7 @@ struct BikeMapView: UIViewRepresentable {
     final class Coordinator: NSObject, MKMapViewDelegate, UIGestureRecognizerDelegate {
         var parent: BikeMapView
         private var hasZoomedToUser = false
+        var lastAppliedTrackingMode: MKUserTrackingMode = .none
 
         // Infrastructure: one MKMultiPolyline per FacilityType
         var multiPolylines: [FacilityType: MKMultiPolyline] = [:]
@@ -320,14 +351,28 @@ struct BikeMapView: UIViewRepresentable {
             lastPuckCoordinate = coordinate
 
             guard movedEnough else { return }
+            // Don't yank the camera mid-pinch/rotate — that was blocking zoom during sim rides.
+            guard !BikeMapView.isActivelyGesturing(mapView) else { return }
+
             switch trackingMode {
             case .follow:
-                mapView.setCenter(coordinate, animated: true)
-            case .followWithHeading:
+                // North-up follow: keep the rider's zoom, flatten and reorient.
+                let distance = mapView.camera.centerCoordinateDistance
                 let camera = MKMapCamera(
                     lookingAtCenter: coordinate,
-                    fromDistance: max(mapView.camera.centerCoordinateDistance, 450),
-                    pitch: max(mapView.camera.pitch, 45),
+                    fromDistance: distance > 1 ? distance : 1_000,
+                    pitch: 0,
+                    heading: 0
+                )
+                mapView.setCamera(camera, animated: true)
+            case .followWithHeading:
+                // Preserve zoom/pitch so the rider can pinch in during navigation.
+                let distance = mapView.camera.centerCoordinateDistance
+                let pitch = mapView.camera.pitch
+                let camera = MKMapCamera(
+                    lookingAtCenter: coordinate,
+                    fromDistance: distance > 1 ? distance : 450,
+                    pitch: pitch > 1 ? pitch : 45,
                     heading: location.course >= 0 ? location.course : mapView.camera.heading
                 )
                 mapView.setCamera(camera, animated: true)

@@ -10,6 +10,9 @@ struct RidesSheet: View {
     @Query(sort: \SavedRoute.createdDate, order: .reverse) private var routes: [SavedRoute]
 
     let graph: BikeNetworkGraph?
+    let recommendedRoutes: [BikeRoute]
+    let activeRecommendedRouteID: UUID?
+    let onSelectRecommended: (BikeRoute) -> Void
     /// Loads the saved route onto the map. Caller should dismiss this sheet first
     /// (or we dismiss here) — do not present another sheet from this callback.
     let onRideThisRoute: (SavedRoute) -> Void
@@ -24,7 +27,7 @@ struct RidesSheet: View {
 
     private enum SheetTab: String, CaseIterable, Identifiable {
         case rides = "My Rides"
-        case routes = "My Routes"
+        case routes = "Routes"
         var id: String { rawValue }
     }
 
@@ -51,9 +54,15 @@ struct RidesSheet: View {
                             onExportGPX: onExportGPX
                         )
                     case .routes:
-                        MyRoutesTab(
-                            routes: routes,
-                            onSelect: { selectedRouteID = $0.id }
+                        RoutesTab(
+                            recommendedRoutes: recommendedRoutes,
+                            activeRecommendedRouteID: activeRecommendedRouteID,
+                            savedRoutes: routes,
+                            onSelectRecommended: { route in
+                                onSelectRecommended(route)
+                                dismiss()
+                            },
+                            onSelectSaved: { selectedRouteID = $0.id }
                         )
                     }
                 }
@@ -426,40 +435,73 @@ private struct RideRow: View {
     }
 }
 
-// MARK: - My Routes
+// MARK: - Routes (suggested + saved)
 
-private struct MyRoutesTab: View {
-    let routes: [SavedRoute]
-    let onSelect: (SavedRoute) -> Void
+private struct RoutesTab: View {
+    let recommendedRoutes: [BikeRoute]
+    let activeRecommendedRouteID: UUID?
+    let savedRoutes: [SavedRoute]
+    let onSelectRecommended: (BikeRoute) -> Void
+    let onSelectSaved: (SavedRoute) -> Void
+
+    private var isEmpty: Bool {
+        recommendedRoutes.isEmpty && savedRoutes.isEmpty
+    }
 
     var body: some View {
-        if routes.isEmpty {
+        if isEmpty {
             ContentUnavailableView(
-                "No saved routes",
-                systemImage: "star",
-                description: Text("Star a finished ride to add it to My Routes.")
+                "No routes yet",
+                systemImage: "bicycle",
+                description: Text("Suggested rides appear here when available. Star a finished ride to save your own.")
             )
         } else {
             List {
-                ForEach(routes, id: \.id) { route in
-                    Button {
-                        onSelect(route)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(route.name)
-                                .font(.subheadline.weight(.semibold))
-                                .foregroundStyle(.primary)
-                            HStack(spacing: 12) {
-                                Text(String(format: "%.1f mi", route.distanceMiles))
-                                Text("\(route.timesRidden)× ridden")
-                                if let best = route.bestMovingDuration {
-                                    Text("Best \(formatDuration(best))")
+                if !recommendedRoutes.isEmpty {
+                    Section {
+                        ForEach(recommendedRoutes) { route in
+                            SuggestedRideRow(
+                                route: route,
+                                isActive: activeRecommendedRouteID == route.id,
+                                onTap: { onSelectRecommended(route) }
+                            )
+                        }
+                    } header: {
+                        Text("Suggested")
+                    } footer: {
+                        Text("From RideWithGPS / BikeForFortCollins. Tap to preview on the map.")
+                    }
+                }
+
+                Section {
+                    if savedRoutes.isEmpty {
+                        Text("Star a finished ride to save it here.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(savedRoutes, id: \.id) { route in
+                            Button {
+                                onSelectSaved(route)
+                            } label: {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(route.name)
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(.primary)
+                                    HStack(spacing: 12) {
+                                        Text(String(format: "%.1f mi", route.distanceMiles))
+                                        Text("\(route.timesRidden)× ridden")
+                                        if let best = route.bestMovingDuration {
+                                            Text("Best \(formatDuration(best))")
+                                        }
+                                    }
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                                 }
                             }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                         }
                     }
+                } header: {
+                    Text("Saved")
                 }
             }
             .listStyle(.insetGrouped)
@@ -471,5 +513,65 @@ private struct MyRoutesTab: View {
         let m = (Int(t) % 3600) / 60
         let s = Int(t) % 60
         return h > 0 ? String(format: "%d:%02d:%02d", h, m, s) : String(format: "%02d:%02d", m, s)
+    }
+}
+
+// MARK: - Suggested ride row
+
+private struct SuggestedRideRow: View {
+    let route: BikeRoute
+    let isActive: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 10) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color(FacilityType.recommendedRide.color))
+                        .frame(width: 22, height: 4)
+
+                    Text(route.streetName)
+                        .font(.subheadline)
+                        .fontWeight(isActive ? .semibold : .regular)
+                        .foregroundStyle(.primary)
+
+                    Spacer()
+
+                    Image(systemName: isActive ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(isActive ? Color(FacilityType.recommendedRide.color) : .secondary)
+                        .font(.system(size: 18))
+                }
+
+                HStack(spacing: 16) {
+                    if let dist = route.formattedDistance {
+                        Label(dist, systemImage: "arrow.left.and.right")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    if let gain = route.formattedElevationGain {
+                        Label(gain, systemImage: "mountain.2")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                if isActive, let desc = route.routeDescription, !desc.isEmpty {
+                    Text(desc)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
+            }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(
+            isActive
+                ? Color(FacilityType.recommendedRide.color).opacity(0.08)
+                : Color.clear
+        )
     }
 }

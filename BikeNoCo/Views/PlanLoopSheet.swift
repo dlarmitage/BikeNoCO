@@ -6,14 +6,23 @@ struct PlanLoopSheet: View {
     let onPreview: (LoopCandidate) -> Void
     let onStart: (LoopCandidate) -> Void
 
-    private var maxLTSSelection: Binding<String> {
+    @State private var detent: PresentationDetent = .fraction(0.72)
+
+    private var streetComfortSelection: Binding<String> {
         Binding(
             get: {
-                if let max = viewModel.loopMaxLTS { return String(max) }
-                return "any"
+                switch viewModel.loopMaxLTS {
+                case 1: return "quietest"
+                case 2: return "calmer"
+                default: return "any"
+                }
             },
             set: { value in
-                viewModel.loopMaxLTS = value == "any" ? nil : Int(value)
+                switch value {
+                case "quietest": viewModel.loopMaxLTS = 1
+                case "calmer": viewModel.loopMaxLTS = 2
+                default: viewModel.loopMaxLTS = nil
+                }
             }
         )
     }
@@ -33,47 +42,50 @@ struct PlanLoopSheet: View {
                         Slider(value: $viewModel.loopTargetMiles, in: 3...40, step: 1)
                     }
 
-                    Picker("Max LTS", selection: maxLTSSelection) {
-                        Text("Any").tag("any")
-                        Text("≤ 2").tag("2")
-                        Text("≤ 1").tag("1")
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Busy streets")
+                        Picker("Busy streets", selection: streetComfortSelection) {
+                            Text("Any").tag("any")
+                            Text("Calmer").tag("calmer")
+                            Text("Quietest").tag("quietest")
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
                     }
 
                     Toggle("Prefer trails", isOn: $viewModel.loopPreferTrails)
 
-                    LabeledContent("Start") {
-                        Text(viewModel.loopSearchUsesPin ? "Dropped pin" : "Current location")
-                            .foregroundStyle(.secondary)
+                    Picker("Start", selection: $viewModel.loopStartUsesPin) {
+                        Text("Current location").tag(false)
+                        Text("Map pin").tag(true)
                     }
                 } header: {
                     Text("Search")
                 } footer: {
-                    Text("Loops are triangles of low-stress bike routes near your target distance.")
+                    Text(startFooterText)
                 }
 
                 Section {
                     Button {
+                        detent = .large
                         viewModel.searchLoops()
                     } label: {
-                        if viewModel.isSearchingLoops && viewModel.loopCandidates.isEmpty {
+                        if viewModel.isSearchingLoops {
                             HStack {
                                 ProgressView()
-                                Text("Finding loops…")
+                                Text(viewModel.loopCandidates.isEmpty ? "Finding loops…" : "Finding more…")
                             }
+                            .frame(maxWidth: .infinity)
                         } else {
                             Label("Find Loops", systemImage: "arrow.triangle.2.circlepath")
+                                .frame(maxWidth: .infinity)
                         }
                     }
                     .disabled(viewModel.isSearchingLoops)
 
-                    if viewModel.isSearchingLoops, !viewModel.loopCandidates.isEmpty {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                            Text("Finding more…")
-                                .foregroundStyle(.secondary)
-                        }
-                        .font(.caption)
-                    } else if let seconds = viewModel.lastLoopSearchSeconds, !viewModel.loopCandidates.isEmpty {
+                    if let seconds = viewModel.lastLoopSearchSeconds,
+                       !viewModel.isSearchingLoops,
+                       !viewModel.loopCandidates.isEmpty {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(String(format: "Found in %.2f s", seconds))
                             if let first = viewModel.lastLoopTimeToFirstSeconds {
@@ -125,8 +137,19 @@ struct PlanLoopSheet: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.fraction(0.72), .large], selection: $detent)
         .presentationDragIndicator(.visible)
+        .presentationBackgroundInteraction(.enabled(upThrough: .fraction(0.72)))
+    }
+
+    private var startFooterText: String {
+        if viewModel.loopStartUsesPin {
+            if viewModel.routeDestination == nil {
+                return "Long-press the map to drop a start pin, then tap Find Loops."
+            }
+            return "Using your dropped map pin as the start."
+        }
+        return "Calmer / Quietest limit busy streets using Level of Traffic Stress (LTS). Quietest is LTS 1 only; Calmer allows up to LTS 2."
     }
 
     private func refinementChip(_ title: String, action: @escaping () -> Void) -> some View {

@@ -13,6 +13,7 @@ struct ContentView: View {
     @State private var showStylePicker = false
     @State private var showPlanLoop = false
     @State private var showRides = false
+    @State private var showProfile = false
     @State private var selectedRoute: BikeRoute?
     @State private var locationBannerDismissed = false
     @State private var completedSession: RideSession?
@@ -116,10 +117,23 @@ struct ContentView: View {
                 )
             }
 
-            // Right-side control column
+            // Right-side control column (profile avatar at top)
             HStack {
                 Spacer()
                 VStack(spacing: 8) {
+                    Button {
+                        showProfile = true
+                    } label: {
+                        Image(systemName: "person.crop.circle.fill")
+                            .font(.system(size: 34))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.primary)
+                            .frame(width: 44, height: 44)
+                            .background(Color(.systemBackground).opacity(0.92), in: Circle())
+                            .shadow(color: .black.opacity(0.15), radius: 4, x: 0, y: 2)
+                    }
+                    .accessibilityLabel("Profile")
+
                     MapControlButton(
                         systemImage: isRecording ? "stop.circle.fill" : "record.circle",
                         tint: .red,
@@ -136,6 +150,7 @@ struct ContentView: View {
                     MapControlButton(
                         systemImage: "location.fill",
                         isActive: viewModel.trackingMode == .follow
+                            || viewModel.trackingMode == .followWithHeading
                     ) {
                         viewModel.toggleLocationTracking()
                     }
@@ -148,20 +163,10 @@ struct ContentView: View {
                     }
 
                     MapControlButton(
-                        systemImage: "list.bullet.rectangle.portrait",
+                        systemImage: "bicycle",
                         isActive: showRides
                     ) {
                         showRides = true
-                    }
-
-                    MapControlButton(systemImage: "plus.magnifyingglass") {
-                        viewModel.trackingMode = .none
-                        viewModel.cameraCommand = .zoomIn
-                    }
-
-                    MapControlButton(systemImage: "minus.magnifyingglass") {
-                        viewModel.trackingMode = .none
-                        viewModel.cameraCommand = .zoomOut
                     }
 
                     MapControlButton(
@@ -218,6 +223,9 @@ struct ContentView: View {
         }
         .animation(.spring(duration: 0.3), value: viewModel.plannedRoute?.totalDistanceMeters)
         .animation(.spring(duration: 0.3), value: isNavigating)
+        .sheet(isPresented: $showProfile) {
+            ProfileView()
+        }
         .sheet(isPresented: $showFilters) {
             FilterView(viewModel: viewModel)
         }
@@ -241,6 +249,16 @@ struct ContentView: View {
         .sheet(isPresented: $showRides) {
             RidesSheet(
                 graph: viewModel.routingGraph,
+                recommendedRoutes: viewModel.recommendedRoutes,
+                activeRecommendedRouteID: viewModel.activeRouteID,
+                onSelectRecommended: { route in
+                    if viewModel.activeRouteID == route.id {
+                        viewModel.activeRouteID = nil
+                    } else {
+                        viewModel.activeRouteID = route.id
+                        viewModel.focusRouteID = route.id
+                    }
+                },
                 onRideThisRoute: { saved in
                     // Sheet already dismissed itself before this callback.
                     activeSavedRouteID = saved.id
@@ -379,6 +397,7 @@ struct ContentView: View {
         }
         if viewModel.trackingMode == .followWithHeading {
             viewModel.trackingMode = .follow
+            viewModel.cameraCommand = .northUp
         }
     }
 
@@ -833,7 +852,6 @@ private struct MapStylePicker: View {
                 .padding(.top, 10)
 
             styleRow(.standard)
-            styleRow(.muted)
             styleRow(.satellite)
             styleRow(.hybrid)
         }

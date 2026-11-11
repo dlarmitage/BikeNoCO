@@ -128,6 +128,7 @@ final class RideRecorder: ObservableObject {
             end: end,
             movingDuration: movingDuration,
             weightKilograms: RiderSettings.weightKilograms,
+            bikeType: RiderSettings.bikeType,
             elevationOverride: barometricElevation()
         )
         resetPauseTracking()
@@ -151,6 +152,18 @@ final class RideRecorder: ObservableObject {
 
     private func startAltimeterIfAvailable() {
         guard let altimeter, !isAltimeterRunning else { return }
+
+        // iOS 17.4+ often won't prompt from CMAltimeter alone; nudge Motion & Fitness auth.
+        if CMAltimeter.authorizationStatus() == .notDetermined {
+            let recorder = CMSensorRecorder()
+            DispatchQueue.global(qos: .utility).async {
+                recorder.recordAccelerometer(forDuration: 0.1)
+            }
+        }
+
+        let status = CMAltimeter.authorizationStatus()
+        guard status == .authorized || status == .notDetermined else { return }
+
         isAltimeterRunning = true
         altimeter.startRelativeAltitudeUpdates(to: .main) { [weak self] data, error in
             guard let self else { return }
@@ -171,17 +184,13 @@ final class RideRecorder: ObservableObject {
         isAltimeterRunning = false
     }
 
-    /// Elevation from barometer using a 0.5 m threshold (GPS uses 2 m).
+    /// Cumulative ascent/descent from relative barometer samples when available.
     private func barometricElevation() -> (gain: Double, loss: Double)? {
-        guard relativeAltitudeSamples.count > 1 else { return nil }
-        var gain = 0.0
-        var loss = 0.0
-        for i in 1..<relativeAltitudeSamples.count {
-            let diff = relativeAltitudeSamples[i].meters - relativeAltitudeSamples[i - 1].meters
-            if diff > 0.5 { gain += diff }
-            else if diff < -0.5 { loss += abs(diff) }
-        }
-        return (gain, loss)
+        let samples = relativeAltitudeSamples.map(\.meters)
+        guard let result = ElevationCalculator.fromBarometer(relativeAltitudes: samples),
+              result.totalChangeMeters > 0
+        else { return nil }
+        return (result.gainMeters, result.lossMeters)
     }
 
     private func subscribeToLocations() {
